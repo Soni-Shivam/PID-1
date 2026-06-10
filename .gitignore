@@ -5,3 +5,5 @@ __pycache__/
 nohup.out
 .venv/
 benchmarks/results/*.tmp
+packaging/build/
+dist/

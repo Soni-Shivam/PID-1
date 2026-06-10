@@ -10,7 +10,7 @@
 - [x] No external compositor; xfwm4 built-in compositor found ON and disabled persistently via `xfconf-query -c xfwm4 -p /general/use_compositing -s false` (2026-06-11)
 - [x] `deploy.sh` works end-to-end (~5 s edit-to-log cycle) (2026-06-11)
 - [x] **ME-01 passed** — window visible (human-confirmed on VM console), RSS baseline: **97.3 MB stable over 60 s**, first paint ~35 ms (2026-06-11)
-- [ ] git repo initialized, first commit pushed to **public** GitHub repo
+- [x] git repo initialized, first commit pushed to **public** GitHub repo (2026-06-11)
 
 ## Environment findings (important)
 - Session is LXQt (`XDG_CURRENT_DESKTOP=LXQt`) but the WM is **xfwm4**, not Openbox (openbox not installed). All EWMH work (ME-02 dock type/struts) must be tested against xfwm4.
@@ -20,7 +20,8 @@
 - PyQt5 RSS baseline 97 MB means ~100 MB headroom under the 200 MB budget for all features.
 
 ## Phases
-- [ ] P — Packaging + autostart skeleton (Day 1) · MEs: ME-09, ME-10
+- [x] P — Packaging + autostart skeleton (Day 1) · MEs: ME-09 PASS, ME-10 PASS
+      build-deb.sh + .deb + /usr/bin launcher + XDG autostart + INSTALL.md done; app skeleton (qt_compat shim + placeholder dock) runs from /usr/lib; autostarts at LxQt login in 239 ms
 - [ ] A — Dock (Days 2-3) · MEs: ME-02..06
 - [ ] B — Application menu (Days 4-5)
 - [ ] C — Widget engine + CMS (Days 6-7) · MEs: ME-07, ME-08
@@ -34,8 +35,11 @@
 | ME | Status | Date | Evidence |
 |----|--------|------|----------|
 | ME-01 | PASS | 2026-06-11 | First paint 35 ms; RSS 97.1 -> 97.3 MB stable at 10/30/60 s; window visible bottom-center (human-confirmed); managed by xfwm4, top of `_NET_CLIENT_LIST_STACKING` |
+| ME-09 | PASS | 2026-06-11 | `build-deb.sh` -> `jiopc-home_0.1.0_all.deb`. On VM (all 4 deps already present): `dpkg -i` clean; runs from `/usr/lib/jiopc-home/main.py`; FIRST_PAINT 43 ms, RSS 103.0 MB; `dpkg -r` removes ALL files (postrm `rm -rf` clears untracked `__pycache__`); `desktop-file-validate` clean |
+| ME-10 | PASS | 2026-06-11 | Autostart entry `/etc/xdg/autostart/jiopc-home.desktop` installed + validates; placeholder dock appears at LxQt login with NO interaction (human-confirmed). Login-to-visible delta (FIRST_PAINT - SESSION_START) = **239 ms** (budget 3 s); app-internal first paint 139 ms; RSS 103.7 MB |
 
 ## Notes / TODO next session
-- Next: Phase P (packaging skeleton + autostart, ME-09/ME-10). The .deb failing on a fresh VM is an automatic disqualifier — de-risk first.
+- OnlyShowIn deliberately OMITTED from the autostart .desktop: session XDG_CURRENT_DESKTOP casing ("LXQt" vs "LxQt") is unreliable for spec's case-sensitive match, and SSH sessions report it empty. Package is LxQt-only anyway. Revisit if needed.
+- Next phase: Phase A — Dock (ME-02 dock type/struts is the highest-risk ME; budget a full session). Reuses core/x11.py (to be created).
 - VM display currently 1280x800-810; test 1280x720 and 1920x1080 at Phase I.
 - Decide whether to `apt install openbox` to match LxQt defaults, or build against xfwm4 (current choice: xfwm4, document in design.md).

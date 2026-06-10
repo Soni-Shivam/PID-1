@@ -22,8 +22,8 @@
 ## Phases
 - [x] P — Packaging + autostart skeleton (Day 1) · MEs: ME-09 PASS, ME-10 PASS
       build-deb.sh + .deb + /usr/bin launcher + XDG autostart + INSTALL.md done; app skeleton (qt_compat shim + placeholder dock) runs from /usr/lib; autostarts at LxQt login in 239 ms
-- [~] A — Dock (Days 2-3) · MEs: ME-02 PASS, ME-05 PASS, ME-06 PASS; ME-03/ME-04 pending
-      core/x11.py done + verified (set_dock_type, set_bottom_strut, activate_window, ClientListWatcher). Still TODO: apps/desktop_entries.py (ME-03), apps/launcher.py (ME-04), dock/ widget
+- [~] A — Dock (Days 2-3) · MEs: ME-02/03/04/05/06 PASS
+      core/x11.py, core/paths.py, core/store.py, apps/desktop_entries.py, apps/launcher.py, apps/usage.py all done + verified. Still TODO: dock/ widget (the visible component)
 - [ ] B — Application menu (Days 4-5)
 - [ ] C — Widget engine + CMS (Days 6-7) · MEs: ME-07, ME-08
 - [ ] D — Theme engine (Day 8) · ME-11
@@ -41,6 +41,8 @@
 | ME-02 | PASS | 2026-06-11 | Set _NET_WM_WINDOW_TYPE_DOCK before map + re-assert after; xprop confirms DOCK type, _NET_WM_STRUT_PARTIAL=0,0,0,64,..,340,939, sticky (0xFFFFFFFF), no decorations (_NET_FRAME_EXTENTS 0). xfwm4 honors strut: _NET_WORKAREA shrank to 1280x746 on 1280x810 screen; maximized window frame occupies y 0..746 exactly (xwininfo), stops at dock top |
 | ME-05 | PASS | 2026-06-11 | ClientListWatcher (QThread, select()-blocking on root PropertyNotify, diffs _NET_CLIENT_LIST): `+ XClock 0x..` / `- 0x..` fire on open/close, WM_CLASS resolved; **idle CPU 0.00%** over 8 s pidstat |
 | ME-06 | PASS | 2026-06-11 | activate_window via _NET_ACTIVE_WINDOW (source=2): focus switches between two qterminals on command; restores a minimized window (HIDDEN cleared + becomes active). NOTE: xclock can't be activated because it sets WM_HINTS input=False (not a code bug) - test with focus-accepting apps |
+| ME-03 | PASS | 2026-06-11 | apps/desktop_entries.py: 183 visible apps enumerated (NoDisplay/Hidden excluded), icons resolve via QIcon.fromTheme, WM_CLASS index maps qterminal/pcmanfm-qt correctly. CAVEAT: 0 flatpaks installed in VM so live flatpak-match unproven (export dirs ARE scanned; rule flatpak-id==desktop-id in place) - install org.gnome.Calculator at Phase I to close |
+| ME-04 | PASS | 2026-06-11 | apps/launcher.py: strip_field_codes drops %U etc.; `featherpad %U` + `qterminal` launched via QProcess.startDetached("/bin/sh",-c); no zombies after close; jiopc unaffected; usage.json written atomically to ~/.local/share/jiopc/home/ (core/store.py + core/paths.py) |
 
 ## Notes / TODO next session
 - OnlyShowIn deliberately OMITTED from the autostart .desktop: session XDG_CURRENT_DESKTOP casing ("LXQt" vs "LxQt") is unreliable for spec's case-sensitive match, and SSH sessions report it empty. Package is LxQt-only anyway. Revisit if needed.

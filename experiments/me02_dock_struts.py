@@ -10,7 +10,7 @@ and maximize a window to check it does not cover the bar.
 """
 from __future__ import annotations
 
-from Xlib import X, Xatom, display
+from Xlib import Xatom, display
 
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtWidgets import QApplication, QLabel, QWidget

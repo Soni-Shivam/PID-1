@@ -23,7 +23,7 @@
 - [x] P — Packaging + autostart skeleton (Day 1) · MEs: ME-09 PASS, ME-10 PASS
       build-deb.sh + .deb + /usr/bin launcher + XDG autostart + INSTALL.md done; app skeleton (qt_compat shim + placeholder dock) runs from /usr/lib; autostarts at LxQt login in 239 ms
 - [~] A — Dock (Days 2-3) · MEs: ME-02/03/04/05/06 PASS
-      core/x11.py, core/paths.py, core/store.py, apps/desktop_entries.py, apps/launcher.py, apps/usage.py all done + verified. Still TODO: dock/ widget (the visible component)
+      dock/widget.py + dock/model.py done; boots as DOCK (geo 320x72, strut honored), 4 default pins from dock.json, running indicators wired to ClientListWatcher (no crash on open/close), launch/focus, pin/unpin/reorder via right-click + persistence, grid button -> menu_requested. Idle CPU 0%, RSS 117 MB. PENDING: human visual confirm; follow-ups: drag-reorder, animated hover-scale, theme tokens (Phase D)
 - [ ] B — Application menu (Days 4-5)
 - [ ] C — Widget engine + CMS (Days 6-7) · MEs: ME-07, ME-08
 - [ ] D — Theme engine (Day 8) · ME-11

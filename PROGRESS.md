@@ -22,7 +22,8 @@
 ## Phases
 - [x] P — Packaging + autostart skeleton (Day 1) · MEs: ME-09 PASS, ME-10 PASS
       build-deb.sh + .deb + /usr/bin launcher + XDG autostart + INSTALL.md done; app skeleton (qt_compat shim + placeholder dock) runs from /usr/lib; autostarts at LxQt login in 239 ms
-- [ ] A — Dock (Days 2-3) · MEs: ME-02..06
+- [~] A — Dock (Days 2-3) · MEs: ME-02 PASS, ME-05 PASS, ME-06 PASS; ME-03/ME-04 pending
+      core/x11.py done + verified (set_dock_type, set_bottom_strut, activate_window, ClientListWatcher). Still TODO: apps/desktop_entries.py (ME-03), apps/launcher.py (ME-04), dock/ widget
 - [ ] B — Application menu (Days 4-5)
 - [ ] C — Widget engine + CMS (Days 6-7) · MEs: ME-07, ME-08
 - [ ] D — Theme engine (Day 8) · ME-11
@@ -37,9 +38,14 @@
 | ME-01 | PASS | 2026-06-11 | First paint 35 ms; RSS 97.1 -> 97.3 MB stable at 10/30/60 s; window visible bottom-center (human-confirmed); managed by xfwm4, top of `_NET_CLIENT_LIST_STACKING` |
 | ME-09 | PASS | 2026-06-11 | `build-deb.sh` -> `jiopc-home_0.1.0_all.deb`. On VM (all 4 deps already present): `dpkg -i` clean; runs from `/usr/lib/jiopc-home/main.py`; FIRST_PAINT 43 ms, RSS 103.0 MB; `dpkg -r` removes ALL files (postrm `rm -rf` clears untracked `__pycache__`); `desktop-file-validate` clean |
 | ME-10 | PASS | 2026-06-11 | Autostart entry `/etc/xdg/autostart/jiopc-home.desktop` installed + validates; placeholder dock appears at LxQt login with NO interaction (human-confirmed). Login-to-visible delta (FIRST_PAINT - SESSION_START) = **239 ms** (budget 3 s); app-internal first paint 139 ms; RSS 103.7 MB |
+| ME-02 | PASS | 2026-06-11 | Set _NET_WM_WINDOW_TYPE_DOCK before map + re-assert after; xprop confirms DOCK type, _NET_WM_STRUT_PARTIAL=0,0,0,64,..,340,939, sticky (0xFFFFFFFF), no decorations (_NET_FRAME_EXTENTS 0). xfwm4 honors strut: _NET_WORKAREA shrank to 1280x746 on 1280x810 screen; maximized window frame occupies y 0..746 exactly (xwininfo), stops at dock top |
+| ME-05 | PASS | 2026-06-11 | ClientListWatcher (QThread, select()-blocking on root PropertyNotify, diffs _NET_CLIENT_LIST): `+ XClock 0x..` / `- 0x..` fire on open/close, WM_CLASS resolved; **idle CPU 0.00%** over 8 s pidstat |
+| ME-06 | PASS | 2026-06-11 | activate_window via _NET_ACTIVE_WINDOW (source=2): focus switches between two qterminals on command; restores a minimized window (HIDDEN cleared + becomes active). NOTE: xclock can't be activated because it sets WM_HINTS input=False (not a code bug) - test with focus-accepting apps |
 
 ## Notes / TODO next session
 - OnlyShowIn deliberately OMITTED from the autostart .desktop: session XDG_CURRENT_DESKTOP casing ("LXQt" vs "LxQt") is unreliable for spec's case-sensitive match, and SSH sessions report it empty. Package is LxQt-only anyway. Revisit if needed.
-- Next phase: Phase A — Dock (ME-02 dock type/struts is the highest-risk ME; budget a full session). Reuses core/x11.py (to be created).
+- VM 00-clean restore did NOT take effect last session (deps still present, jiopc-home still installed). Real fresh-VM .deb install test still owed before/at Day-14 gate.
+- Phase A remaining: ME-03 (apps/desktop_entries.py enumerate system+local+Flatpak .desktop), ME-04 (apps/launcher.py Exec= parse + QProcess.startDetached + usage log), then build dock/ widget (pinned apps from dock.json, running indicators wired to ClientListWatcher, click-to-focus via activate_window, pin/unpin/reorder, hover, grid/menu button).
+- WM_CLASS matching heuristic for dock running-indicators: StartupWMClass -> desktop-id == lower(WM_CLASS) -> Name == WM_CLASS -> generic. qterminal titles itself by shell prompt; match on WM_CLASS not title.
 - VM display currently 1280x800-810; test 1280x720 and 1920x1080 at Phase I.
 - Decide whether to `apt install openbox` to match LxQt defaults, or build against xfwm4 (current choice: xfwm4, document in design.md).

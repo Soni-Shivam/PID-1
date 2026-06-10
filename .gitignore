@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+*.xwd
+*.deb
+nohup.out
+.venv/
+benchmarks/results/*.tmp

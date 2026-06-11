@@ -8,7 +8,7 @@ uses to match running windows to their launcher icon.
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 from xdg.BaseDirectory import xdg_data_dirs, xdg_data_home
@@ -40,8 +40,11 @@ class AppEntry:
         return tuple(keys)
 
 
-def _app_dirs() -> list[Path]:
-    """Application directories, user-first so user entries win de-duplication."""
+def app_dirs() -> list[Path]:
+    """Application directories, user-first so user entries win de-duplication.
+
+    Public so the menu can watch these paths for live install/remove updates.
+    """
     dirs: list[Path] = [Path(xdg_data_home) / "applications"]
     dirs += [Path(d) / "applications" for d in xdg_data_dirs]
     dirs += [
@@ -85,7 +88,7 @@ def _parse(path: Path) -> AppEntry | None:
 def list_apps() -> list[AppEntry]:
     """All visible applications, de-duplicated by id (user > system), by name."""
     by_id: dict[str, AppEntry] = {}
-    for directory in _app_dirs():
+    for directory in app_dirs():
         if not directory.is_dir():
             continue
         for root, _, files in os.walk(directory):

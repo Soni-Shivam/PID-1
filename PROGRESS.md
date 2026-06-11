@@ -24,7 +24,8 @@
       build-deb.sh + .deb + /usr/bin launcher + XDG autostart + INSTALL.md done; app skeleton (qt_compat shim + placeholder dock) runs from /usr/lib; autostarts at LxQt login in 239 ms
 - [~] A — Dock (Days 2-3) · MEs: ME-02/03/04/05/06 PASS
       dock/widget.py + dock/model.py done; boots as DOCK (geo 320x72, strut honored), 4 default pins from dock.json, running indicators wired to ClientListWatcher (no crash on open/close), launch/focus, pin/unpin/reorder via right-click + persistence, grid button -> menu_requested. Idle CPU 0%, RSS 117 MB. PENDING: human visual confirm; follow-ups: drag-reorder, animated hover-scale, theme tokens (Phase D)
-- [ ] B — Application menu (Days 4-5)
+- [~] B — Application menu (Days 4-5)
+      menu/app_model.py (model+proxy: search Name+Comment, category filter, order-by), menu/recommend.py (recently/most/recommended w/ category-overlap scoring), menu/window.py (search + chips + order-by + Recently/Recommended strips + IconMode grid, work-area sized so dock stays visible, live updates via QFileSystemWatcher, Esc/lazy/reusable). Global hotkey Super+Space via core/x11.HotkeyListener + dock button. PENDING: human visual confirm of rendering/click
 - [ ] C — Widget engine + CMS (Days 6-7) · MEs: ME-07, ME-08
 - [ ] D — Theme engine (Day 8) · ME-11
 - [ ] E — First-run wizard (Day 9)

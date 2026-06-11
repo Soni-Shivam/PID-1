@@ -18,7 +18,7 @@ from __future__ import annotations
 import os
 import select
 
-from Xlib import X, Xatom, display, error
+from Xlib import X, XK, Xatom, display, error
 from Xlib import protocol
 
 from core.qt_compat import QtCore
@@ -155,6 +155,90 @@ class ClientListWatcher(QtCore.QThread):
         if not pair:
             return ""
         return pair[1] or pair[0] or ""
+
+    def stop(self) -> None:
+        """Signal the run loop to exit and wait for the thread to finish."""
+        try:
+            os.write(self._stop_w, b"x")
+        except OSError:
+            pass
+        self.wait(2000)
+        for fd in (self._stop_r, self._stop_w):
+            try:
+                os.close(fd)
+            except OSError:
+                pass
+
+
+_MOD_NAMES = {
+    "super": X.Mod4Mask, "meta": X.Mod4Mask, "win": X.Mod4Mask,
+    "ctrl": X.ControlMask, "control": X.ControlMask,
+    "alt": X.Mod1Mask, "shift": X.ShiftMask,
+}
+# Lock-mask combinations so NumLock/CapsLock state does not defeat the grab.
+_LOCK_VARIANTS = (0, X.LockMask, X.Mod2Mask, X.LockMask | X.Mod2Mask)
+
+
+def parse_hotkey(spec: str) -> tuple[int, int]:
+    """'Super+Space' -> (modifier_mask, keysym). Last token is the key."""
+    parts = [p.strip() for p in spec.split("+") if p.strip()]
+    mod = 0
+    keysym = 0
+    for part in parts:
+        name = part.lower()
+        if name in _MOD_NAMES:
+            mod |= _MOD_NAMES[name]
+        else:
+            keysym = XK.string_to_keysym(part) or XK.string_to_keysym(name)
+    return mod, keysym
+
+
+class HotkeyListener(QtCore.QThread):
+    """Grab a global key combo on the root window and emit ``pressed``.
+
+    Blocks in select() between events (0% idle CPU); grabs every lock-mask
+    variant so CapsLock/NumLock do not break it. Stop with ``stop()``.
+    """
+
+    pressed = QtCore.pyqtSignal()
+
+    def __init__(self, spec: str, parent: QtCore.QObject | None = None) -> None:
+        super().__init__(parent)
+        self._mod, self._keysym = parse_hotkey(spec)
+        self._stop_r, self._stop_w = os.pipe()
+
+    def valid(self) -> bool:
+        return self._keysym != 0
+
+    def run(self) -> None:  # noqa: D102 (QThread entry point)
+        if not self.valid():
+            return
+        d = display.Display()
+        root = d.screen().root
+        keycode = d.keysym_to_keycode(self._keysym)
+        if not keycode:
+            d.close()
+            return
+        for variant in _LOCK_VARIANTS:
+            root.grab_key(keycode, self._mod | variant, False,
+                          X.GrabModeAsync, X.GrabModeAsync)
+        d.sync()
+        try:
+            while True:
+                readable, _, _ = select.select([d.fileno(), self._stop_r], [], [])
+                if self._stop_r in readable:
+                    break
+                while d.pending_events():
+                    ev = d.next_event()
+                    if ev.type == X.KeyPress and ev.detail == keycode:
+                        self.pressed.emit()
+        finally:
+            try:
+                root.ungrab_key(keycode, X.AnyModifier)
+                d.sync()
+            except error.XError:
+                pass
+            d.close()
 
     def stop(self) -> None:
         """Signal the run loop to exit and wait for the thread to finish."""

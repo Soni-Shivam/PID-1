@@ -11,8 +11,11 @@ import os
 import time
 
 from core.qt_compat import QtCore, QtWidgets, exec_app
-from core.paths import ensure_dirs
+from core import store, x11
+from core.paths import config_file, ensure_dirs
 from dock.widget import DockWindow
+
+DEFAULT_HOTKEY = "Super+Space"
 
 T_IMPORT = time.monotonic()
 STARTUP_LOG = os.environ.get("JIOPC_STARTUP_LOG", "/tmp/jiopc-startup.log")
@@ -41,6 +44,11 @@ def _log_first_paint() -> None:
     print(line, end="", flush=True)
 
 
+def _menu_hotkey() -> str:
+    settings = store.read_json(config_file("settings.json"), default={}) or {}
+    return settings.get("menu_hotkey", DEFAULT_HOTKEY)
+
+
 def main() -> int:
     ensure_dirs()
     app = QtWidgets.QApplication([])
@@ -48,6 +56,24 @@ def main() -> int:
 
     dock = DockWindow()
     dock.start()
+
+    # The menu is heavy, so build it lazily on first request to protect the
+    # < 3 s startup budget; reuse the instance after that.
+    state: dict = {"menu": None}
+
+    def toggle_menu() -> None:
+        if state["menu"] is None:
+            from menu.window import MenuWindow
+            state["menu"] = MenuWindow()
+        state["menu"].toggle()
+
+    dock.menu_requested.connect(toggle_menu)
+
+    hotkey = x11.HotkeyListener(_menu_hotkey())
+    if hotkey.valid():
+        hotkey.pressed.connect(toggle_menu)
+        hotkey.start()
+
     # Record first paint once the event loop has drawn the dock.
     QtCore.QTimer.singleShot(0, _log_first_paint)
     return exec_app(app)

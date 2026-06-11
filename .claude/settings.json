@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(rsync -az -e \"ssh -p 2222\" ./experiments/ vboxuser@127.0.0.1:~/jiopc-home/experiments/)",
+      "Bash(rsync -az -e \"ssh -p 2222\" ./src/ vboxuser@127.0.0.1:~/jiopc-home/src/)",
+      "Bash(git add *)",
+      "Bash(git commit -q -m ' *)",
+      "Bash(git push *)"
+    ]
+  }
+}

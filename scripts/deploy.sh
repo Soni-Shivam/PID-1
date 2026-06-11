@@ -14,6 +14,11 @@ $SSH "mkdir -p ~/jiopc-home/src ~/jiopc-home/experiments"
 rsync -az --delete -e "ssh -p $PORT" ./src/ "$VM:~/jiopc-home/src/"
 rsync -az --delete -e "ssh -p $PORT" ./experiments/ "$VM:~/jiopc-home/experiments/"
 
-$SSH "pkill -f 'jiopc-home/(src|experiments)/' || true; \
+# Kill any running instance. Match main.py/experiment cmdlines but only kill
+# real python interpreters (comm==python3), never the bash wrapper running this
+# command (which also contains the path) - avoids the pkill self-kill trap.
+$SSH "for pid in \$(pgrep -f 'jiopc-home|main\.py|experiments/'); do \
+    [ \"\$(cat /proc/\$pid/comm 2>/dev/null)\" = python3 ] && kill \$pid 2>/dev/null || true; \
+  done; sleep 1; \
   cd ~/jiopc-home && DISPLAY=:0 nohup python3 $TARGET >/tmp/jiopc.log 2>&1 & \
-  sleep 1; head -20 /tmp/jiopc.log"
+  sleep 1.5; head -20 /tmp/jiopc.log"

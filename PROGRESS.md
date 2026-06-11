@@ -27,7 +27,7 @@
 - [~] B — Application menu (Days 4-5)
       menu/app_model.py (model+proxy: search Name+Comment, category filter, order-by), menu/recommend.py (recently/most/recommended w/ category-overlap scoring), menu/window.py (search + chips + order-by + Recently/Recommended strips + IconMode grid, work-area sized so dock stays visible, live updates via QFileSystemWatcher, Esc/lazy/reusable). Global hotkey Super+Space via core/x11.HotkeyListener + dock button. PENDING: human visual confirm of rendering/click
 - [~] C — Widget engine + CMS (Days 6-7) · MEs: ME-07 PASS, ME-08 PASS
-      core/x11.set_desktop_type added; widgets/cms.py (offline-first) + cms-mock/feed.json + serve.py + bundled default_feed.json done. TODO: widget engine (WidgetPlugin ABC + auto-discovery), 4 plugins, desktop layer window + arrange UI, layout.json
+      widgets/engine.py (WidgetPlugin ABC + auto-discovery + execute_action + layout.json), 4 plugins (greeting_clock, news, quick_tiles, carousel), widgets/desktop.py (DESKTOP-layer grid + Widget Library add/remove), widgets/cms.py offline-first wired in. Boots clean: idle CPU 0.2%, RSS 137 MB; offline (dead endpoint) serves cache, no crash. PENDING: human visual confirm of widget rendering/interaction; follow-ups: drag-arrange, carousel slide animation, image download
 - [ ] D — Theme engine (Day 8) · ME-11
 - [ ] E — First-run wizard (Day 9)
 - [ ] I — Integration day (Day 10) · ME-12

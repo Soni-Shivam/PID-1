@@ -12,8 +12,10 @@ import time
 
 from core.qt_compat import QtCore, QtWidgets, exec_app
 from core import store, x11
-from core.paths import config_file, ensure_dirs
+from core.paths import cache_file, config_file, ensure_dirs
 from dock.widget import DockWindow
+from widgets import cms
+from widgets.desktop import DesktopLayer
 
 DEFAULT_HOTKEY = "Super+Space"
 
@@ -44,15 +46,22 @@ def _log_first_paint() -> None:
     print(line, end="", flush=True)
 
 
-def _menu_hotkey() -> str:
-    settings = store.read_json(config_file("settings.json"), default={}) or {}
-    return settings.get("menu_hotkey", DEFAULT_HOTKEY)
+def _settings() -> dict:
+    return store.read_json(config_file("settings.json"), default={}) or {}
 
 
 def main() -> int:
     ensure_dirs()
+    settings = _settings()
     app = QtWidgets.QApplication([])
     app.setApplicationName("jiopc-home")
+
+    # Desktop widget layer first (it sits at wallpaper level, behind everything).
+    cms_service = cms.CmsService(
+        settings.get("cms_endpoint", cms.default_endpoint()),
+        cache_file(cms.CACHE_NAME))
+    desktop = DesktopLayer(cms_service)
+    desktop.start()
 
     dock = DockWindow()
     dock.start()
@@ -69,7 +78,7 @@ def main() -> int:
 
     dock.menu_requested.connect(toggle_menu)
 
-    hotkey = x11.HotkeyListener(_menu_hotkey())
+    hotkey = x11.HotkeyListener(settings.get("menu_hotkey", DEFAULT_HOTKEY))
     if hotkey.valid():
         hotkey.pressed.connect(toggle_menu)
         hotkey.start()

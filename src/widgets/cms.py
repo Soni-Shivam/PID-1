@@ -49,6 +49,15 @@ def bundled_default() -> dict[str, Any]:
     return data if _valid(data) else empty_feed()
 
 
+def default_endpoint() -> str:
+    """Zero-setup endpoint: the bundled feed file, so refresh works offline.
+
+    Point settings.json ``cms_endpoint`` at the mock server (or a real CMS) to
+    demo live refresh.
+    """
+    return str(_BUNDLED_DEFAULT)
+
+
 def initial_content(cache_path: Path) -> dict[str, Any]:
     """Best content available without the network: cache > bundled > empty."""
     return load_cache(cache_path) or bundled_default()

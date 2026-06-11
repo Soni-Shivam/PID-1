@@ -5,7 +5,9 @@ plugin views on a grid read from layout.json. Right-click opens a Widget Library
 to add/remove widgets; changes persist. CMS-fed widgets share one CmsService and
 refresh live. No per-second work except the clock and (visible-only) carousel.
 
-Colours live in _C for now; they migrate to theme tokens in Phase D.
+The wallpaper and card surfaces are themed by the app-wide stylesheet
+(themes/base.qss.tmpl keyed on #desktopRoot and QFrame[card]); plugins theme
+their own contents from ctx.theme.tokens (Phase D).
 """
 from __future__ import annotations
 
@@ -14,11 +16,10 @@ import pwd
 
 from core.qt_compat import Qt, QtGui, QtWidgets
 from core import x11
+from core.theme import ThemeManager
 from apps.desktop_entries import list_apps
 from widgets import engine
 from widgets.engine import WidgetContext
-
-_C = {"wallpaper": "#0e1116", "card": "#1d1f27", "text": "#e6e6ea"}
 
 
 def _username() -> str:
@@ -32,18 +33,17 @@ def _username() -> str:
 class DesktopLayer(QtWidgets.QWidget):
     """Wallpaper-level window hosting the widget grid."""
 
-    def __init__(self, cms_service) -> None:
+    def __init__(self, cms_service, theme: ThemeManager) -> None:
         super().__init__()
         self._cms = cms_service
+        self._theme = theme
         self._username = _username()
         self._apps_by_id = {a.app_id: a for a in list_apps()}
         self._plugins = engine.discover_plugins()
         self._layout = engine.load_layout()
         self.setWindowFlags(Qt.FramelessWindowHint)
-        self.setStyleSheet(
-            f"#desktopRoot{{background:{_C['wallpaper']};}}"
-            f".card{{background:{_C['card']};border-radius:14px;}}")
-        self.setObjectName("desktopRoot")
+        self.setAttribute(Qt.WA_StyledBackground, True)
+        self.setObjectName("desktopRoot")  # wallpaper from app-wide stylesheet
         self._grid_host = QtWidgets.QWidget(self)
         self._build_grid()
 
@@ -80,6 +80,7 @@ class DesktopLayer(QtWidgets.QWidget):
                 cms=self._cms if plugin.needs_cms else None,
                 run_action=self._run_action,
                 username=self._username,
+                theme=self._theme,
             )
             card = self._wrap(plugin.create_view(ctx))
             grid.addWidget(card, item["row"], item["col"], item["h"], item["w"])
@@ -91,7 +92,7 @@ class DesktopLayer(QtWidgets.QWidget):
         old.deleteLater()
 
     def _wrap(self, view: QtWidgets.QWidget) -> QtWidgets.QWidget:
-        view.setProperty("class", "card")
+        view.setProperty("card", True)  # surface from app-wide stylesheet
         view.setAttribute(Qt.WA_StyledBackground, True)
         return view
 

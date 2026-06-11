@@ -6,22 +6,17 @@ a grid button that will open the application menu (Phase B). Uses core.x11 for
 dock type + strut (verified ME-02), activate_window (ME-06), and a
 ClientListWatcher (ME-05) for running state. No polling.
 
-Colours are centralised in _C for now and migrate to theme tokens in Phase D.
+Window/button chrome is themed by the app-wide stylesheet (themes/base.qss.tmpl
+keyed on #DockRoot / #DockGrid / [dockbtn]); the running-indicator dot is
+custom-painted, so it reads its colour from the live theme tokens (Phase D).
 """
 from __future__ import annotations
 
 from core.qt_compat import Qt, QtCore, QtGui, QtWidgets
 from core import x11
+from core.theme import ThemeManager
 from apps import launcher
 from dock.model import DockModel
-
-# Placeholder palette (migrates to theme tokens in Phase D).
-_C = {
-    "bg": "#1d1f27",
-    "hover": "#2c2f3a",
-    "indicator": "#5b9bff",
-    "grid_fg": "#e6e6ea",
-}
 
 ICON_SIZE = 40
 BTN = 56
@@ -37,9 +32,11 @@ class DockButton(QtWidgets.QToolButton):
     activated = QtCore.pyqtSignal(str)         # left click -> app_id
     context = QtCore.pyqtSignal(str, QtCore.QPoint)
 
-    def __init__(self, app_id: str, name: str, icon: QtGui.QIcon) -> None:
+    def __init__(self, app_id: str, name: str, icon: QtGui.QIcon,
+                 theme: ThemeManager) -> None:
         super().__init__()
         self.app_id = app_id
+        self._theme = theme
         self._running = False
         self.setIcon(icon)
         self.setIconSize(QtCore.QSize(ICON_SIZE, ICON_SIZE))
@@ -47,10 +44,7 @@ class DockButton(QtWidgets.QToolButton):
         self.setToolTip(name)
         self.setAutoRaise(True)
         self.setCursor(Qt.PointingHandCursor)
-        self.setStyleSheet(
-            f"QToolButton{{border:none;border-radius:10px;background:transparent;}}"
-            f"QToolButton:hover{{background:{_C['hover']};}}"
-        )
+        self.setProperty("dockbtn", True)  # styled by app-wide stylesheet
         self.setContextMenuPolicy(Qt.CustomContextMenu)
         self.clicked.connect(lambda: self.activated.emit(self.app_id))
         self.customContextMenuRequested.connect(
@@ -67,7 +61,7 @@ class DockButton(QtWidgets.QToolButton):
             return
         p = QtGui.QPainter(self)
         p.setRenderHint(QtGui.QPainter.Antialiasing)
-        p.setBrush(QtGui.QColor(_C["indicator"]))
+        p.setBrush(QtGui.QColor(self._theme.tokens["indicator"]))
         p.setPen(Qt.NoPen)
         x = (self.width() - DOT) // 2
         p.drawEllipse(x, self.height() - DOT - 3, DOT, DOT)
@@ -78,14 +72,18 @@ class DockWindow(QtWidgets.QWidget):
 
     menu_requested = QtCore.pyqtSignal()
 
-    def __init__(self, model: DockModel | None = None) -> None:
+    def __init__(self, theme: ThemeManager,
+                 model: DockModel | None = None) -> None:
         super().__init__()
+        self._theme = theme
         self.model = model or DockModel()
         self._buttons: dict[str, DockButton] = {}
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
                             | Qt.Tool)
         self.setAttribute(Qt.WA_TranslucentBackground, False)
-        self.setStyleSheet(f"DockWindow{{background:{_C['bg']};}}")
+        self.setAttribute(Qt.WA_StyledBackground, True)
+        self.setObjectName("DockRoot")  # background from app-wide stylesheet
+        theme.theme_changed.connect(self._on_theme_changed)
 
         self._row = QtWidgets.QHBoxLayout(self)
         self._row.setContentsMargins(PAD, PAD, PAD, PAD)
@@ -106,9 +104,18 @@ class DockWindow(QtWidgets.QWidget):
         QtCore.QTimer.singleShot(0, self._apply_dock_geometry)
         self._watcher.start()
 
-    def closeEvent(self, event: QtGui.QCloseEvent) -> None:  # noqa: N802
+    def stop(self) -> None:
+        """Stop the window-tracking thread (called on app quit; D4)."""
         self._watcher.stop()
+
+    def closeEvent(self, event: QtGui.QCloseEvent) -> None:  # noqa: N802
+        self.stop()
         super().closeEvent(event)
+
+    def _on_theme_changed(self) -> None:
+        # The app stylesheet re-themes chrome; repaint the custom-painted dots.
+        for btn in self._buttons.values():
+            btn.update()
 
     # --- building ---------------------------------------------------------
     def _build(self) -> None:
@@ -126,7 +133,7 @@ class DockWindow(QtWidgets.QWidget):
             icon = QtGui.QIcon.fromTheme(app.icon)
             if icon.isNull():
                 icon = style.standardIcon(QtWidgets.QStyle.SP_FileIcon)
-            btn = DockButton(app_id, app.name, icon)
+            btn = DockButton(app_id, app.name, icon, self._theme)
             btn.set_running(self.model.is_running(app_id))
             btn.activated.connect(self._on_activated)
             btn.context.connect(self._show_menu)
@@ -140,14 +147,11 @@ class DockWindow(QtWidgets.QWidget):
 
     def _add_grid_button(self) -> None:
         grid = QtWidgets.QToolButton()
-        grid.setText("☰")  # menu glyph; real icon/menu in Phase B
+        grid.setText("☰")  # menu glyph
+        grid.setObjectName("DockGrid")  # styled by app-wide stylesheet
         grid.setFixedSize(BTN, BTN)
         grid.setCursor(Qt.PointingHandCursor)
         grid.setToolTip("Applications")
-        grid.setStyleSheet(
-            f"QToolButton{{border:none;border-radius:10px;color:{_C['grid_fg']};"
-            f"font-size:22px;background:transparent;}}"
-            f"QToolButton:hover{{background:{_C['hover']};}}")
         grid.clicked.connect(self.menu_requested.emit)
         self._row.addWidget(grid)
 

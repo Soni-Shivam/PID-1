@@ -1,0 +1,83 @@
+/* jiopc-home shell chrome stylesheet (Phase D).
+ * Single source of truth for dock + menu + dialog styling. Rendered by
+ * core.theme.ThemeManager via string.Template (each placeholder is replaced by
+ * the matching token value from the active theme JSON) and applied app-wide with
+ * QApplication.setStyleSheet. Per-widget
+ * plugin looks are themed inside each plugin from ctx.theme.tokens instead.
+ */
+
+/* --- dock ------------------------------------------------------------- */
+#DockRoot { background: $surface; }
+QToolButton[dockbtn="true"] {
+    border: none; border-radius: 10px; background: transparent;
+}
+QToolButton[dockbtn="true"]:hover { background: $hover; }
+QToolButton#DockGrid {
+    border: none; border-radius: 10px; background: transparent;
+    color: $text; font-size: 22px;
+}
+QToolButton#DockGrid:hover { background: $hover; }
+
+/* --- application menu ------------------------------------------------- */
+#MenuRoot { background: $bg; }
+#Search {
+    background: $surface; color: $text; border: none; border-radius: 18px;
+    padding: 12px 18px; font-size: 18px;
+}
+QLabel { color: $muted; }
+QLabel#Section { color: $text; font-size: 14px; font-weight: 600; }
+QPushButton[chip="true"] {
+    background: $surface; color: $muted; border: none; border-radius: 14px;
+    padding: 6px 14px;
+}
+QPushButton[chip="true"]:checked { background: $accent; color: $on_accent; }
+QToolButton[tile="true"] {
+    background: transparent; color: $text; border: none; border-radius: 10px;
+    font-size: 11px;
+}
+QToolButton[tile="true"]:hover { background: $hover; }
+QListView {
+    background: transparent; color: $text; border: none; font-size: 11px;
+}
+QListView::item { border-radius: 10px; padding: 6px; }
+QListView::item:hover { background: $hover; }
+
+/* --- desktop layer (wallpaper + widget cards) ------------------------- */
+#desktopRoot { background: $wallpaper; }
+QFrame[card="true"] { background: $surface; border-radius: 14px; }
+
+/* --- shared controls (settings dialog, widget library, etc.) --------- */
+QDialog { background: $bg; }
+QCheckBox { color: $text; }
+QLineEdit {
+    background: $surface; color: $text; border: none; border-radius: 8px;
+    padding: 6px 10px;
+}
+QComboBox, QSpinBox {
+    background: $surface; color: $text; border: none; border-radius: 8px;
+    padding: 4px 10px;
+}
+QComboBox QAbstractItemView {
+    background: $surface; color: $text; selection-background-color: $accent;
+    selection-color: $on_accent; border: 1px solid $border;
+}
+QPushButton {
+    background: $surface; color: $text; border: none; border-radius: 8px;
+    padding: 6px 14px;
+}
+QPushButton:hover { background: $hover; }
+
+/* --- popups ----------------------------------------------------------- */
+QMenu { background: $surface; color: $text; border: 1px solid $border; }
+QMenu::item { padding: 6px 18px; }
+QMenu::item:selected { background: $accent; color: $on_accent; }
+QToolTip {
+    background: $surface; color: $text; border: 1px solid $border;
+    padding: 4px 8px;
+}
+
+/* --- scrollbars ------------------------------------------------------- */
+QScrollBar:vertical { background: transparent; width: 10px; margin: 0; }
+QScrollBar::handle:vertical { background: $hover; border-radius: 5px; min-height: 24px; }
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
+QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; }

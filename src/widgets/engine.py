@@ -28,6 +28,7 @@ class WidgetContext:
     cms: "object | None"            # CmsService (or None for non-CMS widgets)
     run_action: Callable[[str], None]
     username: str
+    theme: "object"                 # core.theme.ThemeManager (tokens + theme_changed)
 
 
 class WidgetPlugin(ABC):

@@ -1,0 +1,21 @@
+{
+  "name": "dark",
+  "bg": "#15171e",
+  "wallpaper": "#0e1116",
+  "surface": "#1d1f27",
+  "surface_alt": "#242732",
+  "hover": "#2c2f3a",
+  "border": "#313442",
+  "accent": "#5b9bff",
+  "on_accent": "#ffffff",
+  "hero": "#1b3a4b",
+  "hero_text": "#ffffff",
+  "hero_muted": "#c7d2e0",
+  "text": "#e6e6ea",
+  "muted": "#9aa0ab",
+  "indicator": "#5b9bff",
+  "dot": "#54627a",
+  "dot_on": "#ffffff",
+  "font_family": "Noto Sans",
+  "font_size_base": 10
+}

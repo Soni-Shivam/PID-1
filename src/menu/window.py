@@ -6,24 +6,18 @@ a Recommended strip, and the full app grid. Search filters the grid live and
 hides the strips. Click or Enter launches and hides; Esc hides. Built lazily on
 first open and kept alive. Live-updates the catalogue via QFileSystemWatcher.
 
-Colours live in _C for now and migrate to theme tokens in Phase D.
+Chrome is themed by the app-wide stylesheet (themes/base.qss.tmpl keyed on
+#MenuRoot / #Search / [chip] / [tile] / #Section); no colours live here (Phase D).
 """
 from __future__ import annotations
 
 from core.qt_compat import Qt, QtCore, QtGui, QtWidgets
+from core.theme import ThemeManager
 from apps import launcher
 from apps.desktop_entries import AppEntry, app_dirs
 from menu import recommend
 from menu.app_model import ENTRY, AppFilterProxy, AppListModel
-
-_C = {
-    "bg": "#15171e",
-    "surface": "#1d1f27",
-    "hover": "#2c2f3a",
-    "accent": "#5b9bff",
-    "text": "#e6e6ea",
-    "muted": "#9aa0ab",
-}
+from settings.dialog import SettingsDialog
 
 # Main XDG categories -> friendly chip labels, in display order.
 _CATEGORIES = [
@@ -48,11 +42,12 @@ def _icon(app: AppEntry) -> QtGui.QIcon:
 class MenuWindow(QtWidgets.QWidget):
     """Lazily-built, reusable application launcher."""
 
-    def __init__(self) -> None:
+    def __init__(self, theme: ThemeManager) -> None:
         super().__init__()
+        self._theme = theme
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
-        self.setStyleSheet(self._qss())
-        self.setObjectName("MenuRoot")
+        self.setAttribute(Qt.WA_StyledBackground, True)
+        self.setObjectName("MenuRoot")  # background from app-wide stylesheet
 
         self.model = AppListModel(self)
         self.proxy = AppFilterProxy(self)
@@ -95,6 +90,10 @@ class MenuWindow(QtWidgets.QWidget):
         self.order.currentTextChanged.connect(self._on_order)
         controls.addWidget(QtWidgets.QLabel("Sort:"))
         controls.addWidget(self.order)
+        settings_btn = QtWidgets.QPushButton("Settings")
+        settings_btn.setCursor(Qt.PointingHandCursor)
+        settings_btn.clicked.connect(self._open_settings)
+        controls.addWidget(settings_btn)
         outer.addLayout(controls)
 
         self.recent_label, self.recent_strip = self._section("Recently used")
@@ -216,6 +215,9 @@ class MenuWindow(QtWidgets.QWidget):
         launcher.launch(app)
         self.hide()
 
+    def _open_settings(self) -> None:
+        SettingsDialog(self._theme, self).exec_()
+
     # --- live updates -----------------------------------------------------
     def _schedule_reload(self, _path: str) -> None:
         self._reload_timer.start(1000)
@@ -238,25 +240,3 @@ class MenuWindow(QtWidgets.QWidget):
         self.raise_()
         self.activateWindow()
         self.search.setFocus()
-
-    def _qss(self) -> str:
-        return (
-            f"#MenuRoot{{background:{_C['bg']};}}"
-            f"#Search{{background:{_C['surface']};color:{_C['text']};"
-            f"border:none;border-radius:18px;padding:12px 18px;font-size:18px;}}"
-            f"QLabel{{color:{_C['muted']};}}"
-            f"QLabel#Section{{color:{_C['text']};font-size:14px;font-weight:600;}}"
-            f"QComboBox{{background:{_C['surface']};color:{_C['text']};"
-            f"border:none;border-radius:8px;padding:4px 10px;}}"
-            f"QPushButton[chip=\"true\"]{{background:{_C['surface']};"
-            f"color:{_C['muted']};border:none;border-radius:14px;padding:6px 14px;}}"
-            f"QPushButton[chip=\"true\"]:checked{{background:{_C['accent']};"
-            f"color:#ffffff;}}"
-            f"QToolButton[tile=\"true\"]{{background:transparent;color:{_C['text']};"
-            f"border:none;border-radius:10px;font-size:11px;}}"
-            f"QToolButton[tile=\"true\"]:hover{{background:{_C['hover']};}}"
-            f"QListView{{background:transparent;color:{_C['text']};border:none;"
-            f"font-size:11px;}}"
-            f"QListView::item{{border-radius:10px;padding:6px;}}"
-            f"QListView::item:hover{{background:{_C['hover']};}}"
-        )

@@ -2,7 +2,8 @@
 
 Personalised greeting (user's real name from the passwd GECOS field, with a
 time-of-day salutation) plus a 1 s clock - the only per-second timer in the
-shell, as allowed by CLAUDE.md.
+shell, as allowed by CLAUDE.md. Text colours come from the live theme tokens and
+restyle on theme_changed (Phase D).
 """
 from __future__ import annotations
 
@@ -10,8 +11,6 @@ import time
 
 from core.qt_compat import QtCore, QtWidgets
 from widgets.engine import WidgetContext, WidgetPlugin
-
-_C = {"text": "#e6e6ea", "muted": "#9aa0ab"}
 
 
 def _salutation(hour: int) -> str:
@@ -23,28 +22,36 @@ def _salutation(hour: int) -> str:
 
 
 class _GreetingClock(QtWidgets.QFrame):
-    def __init__(self, username: str) -> None:
+    def __init__(self, ctx: WidgetContext) -> None:
         super().__init__()
+        self._ctx = ctx
+        username = ctx.username
         self._username = username.split()[0] if username else "there"
         lay = QtWidgets.QVBoxLayout(self)
         lay.setContentsMargins(20, 18, 20, 18)
         lay.setSpacing(4)
 
         self._clock = QtWidgets.QLabel()
-        self._clock.setStyleSheet(f"color:{_C['text']};font-size:34px;font-weight:700;")
         self._date = QtWidgets.QLabel()
-        self._date.setStyleSheet(f"color:{_C['muted']};font-size:13px;")
         self._greet = QtWidgets.QLabel()
-        self._greet.setStyleSheet(f"color:{_C['text']};font-size:18px;font-weight:600;")
         lay.addWidget(self._greet)
         lay.addStretch(1)
         lay.addWidget(self._clock)
         lay.addWidget(self._date)
 
+        self._apply_theme()
+        ctx.theme.theme_changed.connect(self._apply_theme)
+
         self._timer = QtCore.QTimer(self)
         self._timer.setInterval(1000)
         self._timer.timeout.connect(self._tick)
         self._tick()
+
+    def _apply_theme(self) -> None:
+        t = self._ctx.theme.tokens
+        self._clock.setStyleSheet(f"color:{t['text']};font-size:34px;font-weight:700;")
+        self._date.setStyleSheet(f"color:{t['muted']};font-size:13px;")
+        self._greet.setStyleSheet(f"color:{t['text']};font-size:18px;font-weight:600;")
 
     def _tick(self) -> None:
         now = time.localtime()
@@ -67,4 +74,4 @@ class GreetingClockPlugin(WidgetPlugin):
     default_size = (1, 1)
 
     def create_view(self, ctx: WidgetContext) -> QtWidgets.QWidget:
-        return _GreetingClock(ctx.username)
+        return _GreetingClock(ctx)

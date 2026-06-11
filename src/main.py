@@ -13,6 +13,7 @@ import time
 from core.qt_compat import QtCore, QtWidgets, exec_app
 from core import store, x11
 from core.paths import cache_file, config_file, ensure_dirs
+from core.theme import ThemeManager
 from dock.widget import DockWindow
 from widgets import cms
 from widgets.desktop import DesktopLayer
@@ -56,14 +57,19 @@ def main() -> int:
     app = QtWidgets.QApplication([])
     app.setApplicationName("jiopc-home")
 
+    # Theme first: render the app-wide stylesheet + font before any window shows,
+    # so first paint is already themed (no flash of unstyled chrome).
+    theme = ThemeManager(app)
+    theme.apply()
+
     # Desktop widget layer first (it sits at wallpaper level, behind everything).
     cms_service = cms.CmsService(
         settings.get("cms_endpoint", cms.default_endpoint()),
         cache_file(cms.CACHE_NAME))
-    desktop = DesktopLayer(cms_service)
+    desktop = DesktopLayer(cms_service, theme)
     desktop.start()
 
-    dock = DockWindow()
+    dock = DockWindow(theme)
     dock.start()
 
     # The menu is heavy, so build it lazily on first request to protect the
@@ -73,7 +79,7 @@ def main() -> int:
     def toggle_menu() -> None:
         if state["menu"] is None:
             from menu.window import MenuWindow
-            state["menu"] = MenuWindow()
+            state["menu"] = MenuWindow(theme)
         state["menu"].toggle()
 
     dock.menu_requested.connect(toggle_menu)
@@ -82,6 +88,14 @@ def main() -> int:
     if hotkey.valid():
         hotkey.pressed.connect(toggle_menu)
         hotkey.start()
+
+    # Stop background threads cleanly on quit (closeEvent won't fire; D4).
+    def _cleanup() -> None:
+        dock.stop()
+        if hotkey.valid():
+            hotkey.stop()
+
+    app.aboutToQuit.connect(_cleanup)
 
     # Record first paint once the event loop has drawn the dock.
     QtCore.QTimer.singleShot(0, _log_first_paint)

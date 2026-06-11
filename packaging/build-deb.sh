@@ -85,10 +85,17 @@ chmod 755 "$STAGE/DEBIAN/postinst"
 # --- postrm: drop the app dir wholesale, incl. untracked byte-compiled cache --
 # The package owns everything under /usr/lib/jiopc-home, but postinst's
 # __pycache__ is untracked and would otherwise block dpkg's dir cleanup.
+# Guard on $1: dpkg runs the OLD package's `postrm upgrade` AFTER the new files
+# are unpacked, so an unconditional rm here would delete a fresh upgrade/reinstall
+# (it does - the gate caught this). Only purge the dir on real removal.
 cat > "$STAGE/DEBIAN/postrm" <<'EOF'
 #!/bin/sh
 set -e
-rm -rf /usr/lib/jiopc-home 2>/dev/null || true
+case "$1" in
+  remove|purge)
+    rm -rf /usr/lib/jiopc-home 2>/dev/null || true
+    ;;
+esac
 exit 0
 EOF
 chmod 755 "$STAGE/DEBIAN/postrm"

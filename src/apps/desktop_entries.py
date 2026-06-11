@@ -30,14 +30,41 @@ class AppEntry:
     @property
     def wm_class_keys(self) -> tuple[str, ...]:
         """Lowercased keys for matching a running window's WM_CLASS, ordered
-        most-specific first: StartupWMClass, app-id, app-id last segment, Name."""
+        most-specific first: StartupWMClass, app-id, app-id last segment, the
+        executable basename, then Name.
+
+        The executable key is essential for apps that lack StartupWMClass and
+        whose window class follows their binary - e.g. Flatpak GNOME apps, whose
+        wrapper carries ``--command=gnome-calculator`` while the app-id is
+        ``org.gnome.Calculator`` (the live window reports ``gnome-calculator``)."""
         keys: list[str] = []
         for raw in (self.startup_wm_class, self.app_id,
-                    self.app_id.rsplit(".", 1)[-1], self.name):
+                    self.app_id.rsplit(".", 1)[-1], _exec_basename(self.exec_cmd),
+                    self.name):
             k = (raw or "").lower()
             if k and k not in keys:
                 keys.append(k)
         return tuple(keys)
+
+
+_EXEC_WRAPPERS = {"flatpak", "env", "sh", "bash", "run", "snap", "gtk-launch"}
+
+
+def _exec_basename(exec_cmd: str) -> str:
+    """Best-guess WM_CLASS hint from an Exec line: the sandboxed command for a
+    Flatpak wrapper (``--command=X``), otherwise the first real binary's basename
+    (skipping wrappers and field codes)."""
+    tokens = (exec_cmd or "").split()
+    for tok in tokens:
+        if tok.startswith("--command="):
+            return os.path.basename(tok.split("=", 1)[1])
+    for tok in tokens:
+        if tok.startswith(("-", "%")) or "=" in tok:
+            continue
+        base = os.path.basename(tok)
+        if base and base not in _EXEC_WRAPPERS:
+            return base
+    return ""
 
 
 def app_dirs() -> list[Path]:

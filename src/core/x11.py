@@ -46,10 +46,24 @@ def set_dock_type(win_id: int) -> None:
     window via ``int(widget.winId())`` (creates but does not map it), call this,
     then ``widget.show()``. Re-assert after show() to survive Qt rewrites.
     """
+    _set_window_type(win_id, "_NET_WM_WINDOW_TYPE_DOCK")
+
+
+def set_desktop_type(win_id: int) -> None:
+    """Mark a window as the desktop layer (kept below all normal windows).
+
+    Set before mapping (same pattern as set_dock_type). Among DESKTOP-type
+    windows the later-mapped one stacks above, so our layer maps after
+    pcmanfm-qt's desktop and sits just above it (verified ME-07).
+    """
+    _set_window_type(win_id, "_NET_WM_WINDOW_TYPE_DESKTOP")
+
+
+def _set_window_type(win_id: int, type_name: str) -> None:
     d = _get_display()
     w = d.create_resource_object("window", win_id)
     w.change_property(_atom(d, "_NET_WM_WINDOW_TYPE"), Xatom.ATOM, 32,
-                      [_atom(d, "_NET_WM_WINDOW_TYPE_DOCK")])
+                      [_atom(d, type_name)])
     d.sync()
 
 

@@ -1,0 +1,70 @@
+{
+  "version": 1,
+  "fetched_hint_minutes": 240,
+  "carousel": [
+    {
+      "id": "c1",
+      "title": "Got a doubt? We've got you.",
+      "subtitle": "CBSE / JEE / NEET / UPSC - Khan Academy, Testbook and more on your TV",
+      "image_url": "",
+      "cta_label": "Start learning",
+      "cta_action": "url:https://www.khanacademy.org"
+    },
+    {
+      "id": "c2",
+      "title": "Discover JioPC",
+      "subtitle": "A full computer on your TV. Browse, create, learn - no laptop needed.",
+      "image_url": "",
+      "cta_label": "Take a quick tour",
+      "cta_action": "app:lxqt-about.desktop"
+    },
+    {
+      "id": "c3",
+      "title": "Play games on the big screen",
+      "subtitle": "Cloud and casual games, no console required.",
+      "image_url": "",
+      "cta_label": "Browse games",
+      "cta_action": "url:https://www.jio.com/games"
+    },
+    {
+      "id": "c4",
+      "title": "Start your fitness routine",
+      "subtitle": "Follow along with guided workouts on a screen everyone can see.",
+      "image_url": "",
+      "cta_label": "Get moving",
+      "cta_action": "url:https://www.youtube.com/results?search_query=home+workout"
+    },
+    {
+      "id": "c5",
+      "title": "Manage your money",
+      "subtitle": "Track investments and pay bills from the comfort of your couch.",
+      "image_url": "",
+      "cta_label": "Open finance",
+      "cta_action": "url:https://www.jiofinance.com"
+    },
+    {
+      "id": "c6",
+      "title": "Watch, stream, relax",
+      "subtitle": "Your favourite shows and movies, one click away.",
+      "image_url": "",
+      "cta_label": "Start watching",
+      "cta_action": "url:https://www.jiocinema.com"
+    }
+  ],
+  "news": [
+    {"id": "n1", "headline": "ISRO launches new satellite successfully", "source": "PTI", "ts": 1781100000, "url": "https://www.isro.gov.in"},
+    {"id": "n2", "headline": "Sensex crosses 85,000 mark", "source": "ET Markets", "ts": 1781090000, "url": "https://economictimes.indiatimes.com"},
+    {"id": "n3", "headline": "Exclusive: CMF Phone 3 Pro specs revealed", "source": "GSMArena", "ts": 1781080000, "url": "https://www.gsmarena.com"},
+    {"id": "n4", "headline": "IPL 2026: Mumbai Indians beat CSK", "source": "Cricbuzz", "ts": 1781070000, "url": "https://www.cricbuzz.com"},
+    {"id": "n5", "headline": "Monsoon arrives early over Kerala coast", "source": "IMD", "ts": 1781060000, "url": "https://mausam.imd.gov.in"},
+    {"id": "n6", "headline": "New national education policy rollout begins", "source": "The Hindu", "ts": 1781050000, "url": "https://www.thehindu.com"}
+  ],
+  "tiles": [
+    {"id": "t1", "label": "Study for exams", "icon": "applications-education", "action": "url:https://www.khanacademy.org"},
+    {"id": "t2", "label": "Play games on TV", "icon": "applications-games", "action": "url:https://www.jio.com/games"},
+    {"id": "t3", "label": "Start fitness routine", "icon": "applications-utilities", "action": "url:https://www.youtube.com/results?search_query=yoga"},
+    {"id": "t4", "label": "Manage investments", "icon": "applications-office", "action": "url:https://www.jiofinance.com"},
+    {"id": "t5", "label": "Browse the web", "icon": "applications-internet", "action": "app:firefox.desktop"},
+    {"id": "t6", "label": "Open files", "icon": "system-file-manager", "action": "app:pcmanfm-qt.desktop"}
+  ]
+}

@@ -64,13 +64,13 @@ Version: $VERSION
 Section: x11
 Priority: optional
 Architecture: $ARCH
-Depends: python3 (>= 3.11), python3-pyqt5, python3-xdg, python3-xlib, python3-requests
+Depends: python3 (>= 3.11), python3-pyqt5, python3-xdg, python3-xlib, python3-requests, papirus-icon-theme
 Installed-Size: $INSTALLED_KB
 Maintainer: Shivam Soni <sonishivam.iitb@gmail.com>
 Description: JioPC Home - engaging desktop shell for LxQt
  Single-process Qt desktop shell for LxQt providing a dock, application
- menu, CMS-driven desktop widgets, a token theme engine, and a once-only
- first-run wizard. Renders on CPU only (no compositor, no GPU).
+ menu, CMS-driven desktop widgets, and a light/dark token theme engine.
+ Renders on CPU only (no compositor, no GPU).
 EOF
 
 # --- postinst: byte-compile for a faster cold start -------------------------

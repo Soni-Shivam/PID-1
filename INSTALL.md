@@ -24,7 +24,7 @@ the Ubuntu archive automatically.
 
 ```bash
 # 1. install runtime dependencies (all from the Ubuntu archive)
-sudo apt install -y python3-pyqt5 python3-xdg python3-xlib python3-requests
+sudo apt install -y python3-pyqt5 python3-xdg python3-xlib python3-requests papirus-icon-theme
 
 # 2. install the package
 sudo dpkg -i jiopc-home_0.1.0_all.deb

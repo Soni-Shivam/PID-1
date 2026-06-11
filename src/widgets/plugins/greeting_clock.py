@@ -28,12 +28,13 @@ class _GreetingClock(QtWidgets.QFrame):
         username = ctx.username
         self._username = username.split()[0] if username else "there"
         lay = QtWidgets.QVBoxLayout(self)
-        lay.setContentsMargins(20, 18, 20, 18)
-        lay.setSpacing(4)
+        lay.setContentsMargins(26, 24, 26, 24)
+        lay.setSpacing(2)
 
+        self._greet = QtWidgets.QLabel()
+        self._greet.setWordWrap(True)
         self._clock = QtWidgets.QLabel()
         self._date = QtWidgets.QLabel()
-        self._greet = QtWidgets.QLabel()
         lay.addWidget(self._greet)
         lay.addStretch(1)
         lay.addWidget(self._clock)
@@ -49,13 +50,19 @@ class _GreetingClock(QtWidgets.QFrame):
 
     def _apply_theme(self) -> None:
         t = self._ctx.theme.tokens
-        self._clock.setStyleSheet(f"color:{t['text']};font-size:34px;font-weight:700;")
+        self._clock.setStyleSheet(
+            f"color:{t['text']};font-size:44px;font-weight:800;")
         self._date.setStyleSheet(f"color:{t['muted']};font-size:13px;")
-        self._greet.setStyleSheet(f"color:{t['text']};font-size:18px;font-weight:600;")
+        self._tick()  # greeting carries accent, so refresh on theme change
 
     def _tick(self) -> None:
+        t = self._ctx.theme.tokens
         now = time.localtime()
-        self._greet.setText(f"{_salutation(now.tm_hour)}, {self._username}")
+        self._greet.setText(
+            f"<span style='color:{t['muted']};font-size:17px;font-weight:600;'>"
+            f"{_salutation(now.tm_hour)}, </span>"
+            f"<span style='color:{t['accent']};font-size:17px;font-weight:700;'>"
+            f"{self._username}</span>")
         self._clock.setText(time.strftime("%I:%M %p", now).lstrip("0"))
         self._date.setText(time.strftime("%A, %d %B %Y", now))
 

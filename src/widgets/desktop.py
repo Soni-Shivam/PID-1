@@ -68,8 +68,8 @@ class DesktopLayer(QtWidgets.QWidget):
         self._grid_host = QtWidgets.QWidget(self)
         self._grid_host.setGeometry(self.rect())
         grid = QtWidgets.QGridLayout(self._grid_host)
-        grid.setContentsMargins(40, 40, 40, 40)
-        grid.setSpacing(18)
+        grid.setContentsMargins(48, 44, 48, 44)
+        grid.setSpacing(22)
 
         max_col = 0
         for item in self._layout:

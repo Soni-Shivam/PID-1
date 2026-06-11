@@ -91,6 +91,7 @@ class MenuWindow(QtWidgets.QWidget):
         controls.addWidget(QtWidgets.QLabel("Sort:"))
         controls.addWidget(self.order)
         settings_btn = QtWidgets.QPushButton("Settings")
+        settings_btn.setIcon(QtGui.QIcon.fromTheme("configure"))
         settings_btn.setCursor(Qt.PointingHandCursor)
         settings_btn.clicked.connect(self._open_settings)
         controls.addWidget(settings_btn)

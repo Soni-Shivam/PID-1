@@ -23,7 +23,9 @@ class _Carousel(QtWidgets.QFrame):
         self.setAttribute(Qt.WA_StyledBackground, True)
 
         root = QtWidgets.QVBoxLayout(self)
-        root.setContentsMargins(24, 22, 24, 18)
+        root.setContentsMargins(28, 26, 28, 20)
+        root.setSpacing(6)
+        self._eyebrow = QtWidgets.QLabel("FEATURED")
         self._title = QtWidgets.QLabel()
         self._title.setWordWrap(True)
         self._subtitle = QtWidgets.QLabel()
@@ -32,6 +34,7 @@ class _Carousel(QtWidgets.QFrame):
         self._cta.setCursor(Qt.PointingHandCursor)
         self._cta.clicked.connect(self._activate_cta)
 
+        root.addWidget(self._eyebrow)
         root.addWidget(self._title)
         root.addWidget(self._subtitle)
         root.addStretch(1)
@@ -67,9 +70,13 @@ class _Carousel(QtWidgets.QFrame):
     def _apply_theme(self) -> None:
         t = self._ctx.theme.tokens
         self.setStyleSheet(
-            f"#carouselRoot{{background:{t['hero']};border-radius:14px;}}")
+            f"#carouselRoot{{background:{t['hero']};border:none;"
+            f"border-radius:18px;}}")
+        self._eyebrow.setStyleSheet(
+            f"color:{t['accent']};font-size:11px;font-weight:800;"
+            f"letter-spacing:2px;")
         self._title.setStyleSheet(
-            f"color:{t['hero_text']};font-size:24px;font-weight:700;")
+            f"color:{t['hero_text']};font-size:26px;font-weight:800;")
         self._subtitle.setStyleSheet(f"color:{t['hero_muted']};font-size:13px;")
         self._cta.setStyleSheet(
             f"QPushButton{{background:{t['accent']};color:{t['on_accent']};"

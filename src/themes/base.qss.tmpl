@@ -2,82 +2,131 @@
  * Single source of truth for dock + menu + dialog styling. Rendered by
  * core.theme.ThemeManager via string.Template (each placeholder is replaced by
  * the matching token value from the active theme JSON) and applied app-wide with
- * QApplication.setStyleSheet. Per-widget
- * plugin looks are themed inside each plugin from ctx.theme.tokens instead.
+ * QApplication.setStyleSheet. Per-widget plugin looks are themed inside each
+ * plugin from ctx.theme.tokens instead.
  */
 
 /* --- dock ------------------------------------------------------------- */
-#DockRoot { background: $surface; }
+#DockRoot { background: $surface; border: 1px solid $border; border-radius: 14px; }
 QToolButton[dockbtn="true"] {
-    border: none; border-radius: 10px; background: transparent;
+    border: none; border-radius: 12px; background: transparent; padding: 2px;
 }
 QToolButton[dockbtn="true"]:hover { background: $hover; }
 QToolButton#DockGrid {
-    border: none; border-radius: 10px; background: transparent;
-    color: $text; font-size: 22px;
+    border: none; border-radius: 12px; background: $accent_soft;
+    color: $accent; font-size: 22px;
 }
-QToolButton#DockGrid:hover { background: $hover; }
+QToolButton#DockGrid:hover { background: $accent; color: $on_accent; }
 
 /* --- application menu ------------------------------------------------- */
 #MenuRoot { background: $bg; }
 #Search {
-    background: $surface; color: $text; border: none; border-radius: 18px;
-    padding: 12px 18px; font-size: 18px;
+    background: $surface; color: $text; border: 1px solid $border;
+    border-radius: 22px; padding: 13px 20px; font-size: 17px;
+    selection-background-color: $accent; selection-color: $on_accent;
 }
-QLabel { color: $muted; }
-QLabel#Section { color: $text; font-size: 14px; font-weight: 600; }
+#Search:focus { border: 1px solid $accent; }
+QLabel { color: $muted; background: transparent; }
+QLabel#Section {
+    color: $text; font-size: 13px; font-weight: 700; padding-left: 2px;
+}
+#Hint { color: $muted; font-size: 14px; }
+
+/* category chips */
 QPushButton[chip="true"] {
-    background: $surface; color: $muted; border: none; border-radius: 14px;
-    padding: 6px 14px;
+    background: $surface; color: $muted; border: 1px solid $border;
+    border-radius: 15px; padding: 6px 16px; font-size: 12px; font-weight: 600;
 }
-QPushButton[chip="true"]:checked { background: $accent; color: $on_accent; }
+QPushButton[chip="true"]:hover { color: $text; border: 1px solid $accent; }
+QPushButton[chip="true"]:checked {
+    background: $accent; color: $on_accent; border: 1px solid $accent;
+}
+
+/* grid tiles + strip tiles */
 QToolButton[tile="true"] {
-    background: transparent; color: $text; border: none; border-radius: 10px;
-    font-size: 11px;
+    background: transparent; color: $text; border: 1px solid transparent;
+    border-radius: 12px; font-size: 11px; padding: 4px;
 }
-QToolButton[tile="true"]:hover { background: $hover; }
+QToolButton[tile="true"]:hover { background: $hover; border: 1px solid $border; }
 QListView {
     background: transparent; color: $text; border: none; font-size: 11px;
+    outline: none;
 }
-QListView::item { border-radius: 10px; padding: 6px; }
+QListView::item { border-radius: 12px; padding: 8px 4px; margin: 2px; }
 QListView::item:hover { background: $hover; }
+QListView::item:selected { background: $accent_soft; color: $text; }
 
 /* --- desktop layer (wallpaper + widget cards) ------------------------- */
 #desktopRoot { background: $wallpaper; }
-QFrame[card="true"] { background: $surface; border-radius: 14px; }
+QFrame[card="true"] {
+    background: $surface; border: 1px solid $border; border-radius: 18px;
+}
 
 /* --- shared controls (settings dialog, widget library, etc.) --------- */
 QDialog { background: $bg; }
-QCheckBox { color: $text; }
-QLineEdit {
-    background: $surface; color: $text; border: none; border-radius: 8px;
-    padding: 6px 10px;
+QCheckBox { color: $text; spacing: 8px; padding: 4px; }
+QCheckBox::indicator {
+    width: 18px; height: 18px; border-radius: 5px;
+    border: 1px solid $border; background: $surface;
 }
-QComboBox, QSpinBox {
-    background: $surface; color: $text; border: none; border-radius: 8px;
-    padding: 4px 10px;
+QCheckBox::indicator:checked { background: $accent; border: 1px solid $accent; }
+QLineEdit {
+    background: $surface; color: $text; border: 1px solid $border;
+    border-radius: 9px; padding: 7px 12px;
+    selection-background-color: $accent; selection-color: $on_accent;
+}
+QLineEdit:focus { border: 1px solid $accent; }
+
+QComboBox, QSpinBox, QFontComboBox {
+    background: $surface; color: $text; border: 1px solid $border;
+    border-radius: 10px; padding: 6px 12px; min-height: 20px;
+}
+QComboBox:hover, QSpinBox:hover, QFontComboBox:hover { border: 1px solid $accent; }
+QComboBox:focus, QSpinBox:focus { border: 1px solid $accent; }
+QComboBox::drop-down, QFontComboBox::drop-down {
+    border: none; width: 22px; subcontrol-position: center right;
+    subcontrol-origin: padding; margin-right: 4px;
 }
 QComboBox QAbstractItemView {
     background: $surface; color: $text; selection-background-color: $accent;
-    selection-color: $on_accent; border: 1px solid $border;
+    selection-color: $on_accent; border: 1px solid $border; border-radius: 8px;
+    padding: 4px; outline: none;
 }
+QSpinBox::up-button, QSpinBox::down-button { width: 16px; border: none; }
+
+/* default (secondary) buttons */
 QPushButton {
-    background: $surface; color: $text; border: none; border-radius: 8px;
-    padding: 6px 14px;
+    background: $surface; color: $text; border: 1px solid $border;
+    border-radius: 10px; padding: 7px 16px; font-weight: 600;
 }
-QPushButton:hover { background: $hover; }
+QPushButton:hover { background: $hover; border: 1px solid $accent; }
+QPushButton:pressed { background: $accent_soft; }
+QPushButton:default {
+    background: $accent; color: $on_accent; border: 1px solid $accent;
+}
+QPushButton:default:hover { background: $accent; border: 1px solid $on_accent; }
 
 /* --- popups ----------------------------------------------------------- */
-QMenu { background: $surface; color: $text; border: 1px solid $border; }
-QMenu::item { padding: 6px 18px; }
+QMenu {
+    background: $surface; color: $text; border: 1px solid $border;
+    border-radius: 10px; padding: 6px;
+}
+QMenu::item { padding: 7px 22px; border-radius: 7px; }
 QMenu::item:selected { background: $accent; color: $on_accent; }
+QMenu::separator { height: 1px; background: $border; margin: 5px 8px; }
 QToolTip {
     background: $surface; color: $text; border: 1px solid $border;
-    padding: 4px 8px;
+    border-radius: 6px; padding: 5px 9px;
 }
 
 /* --- scrollbars ------------------------------------------------------- */
-QScrollBar:vertical { background: transparent; width: 10px; margin: 0; }
-QScrollBar::handle:vertical { background: $hover; border-radius: 5px; min-height: 24px; }
+QScrollBar:vertical { background: transparent; width: 10px; margin: 2px; }
+QScrollBar::handle:vertical { background: $border; border-radius: 5px; min-height: 28px; }
+QScrollBar::handle:vertical:hover { background: $muted; }
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
 QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; }
+QScrollBar:horizontal { background: transparent; height: 10px; margin: 2px; }
+QScrollBar::handle:horizontal { background: $border; border-radius: 5px; min-width: 28px; }
+QScrollBar::handle:horizontal:hover { background: $muted; }
+QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal { width: 0; }
+QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal { background: transparent; }

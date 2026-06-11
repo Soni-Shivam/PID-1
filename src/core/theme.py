@@ -62,7 +62,7 @@ class ThemeManager(QtCore.QObject):
 
     # --- apply ------------------------------------------------------------
     def apply(self) -> None:
-        """Render the template and push it (+ font) to the whole application."""
+        """Render the template and push it (+ font + icons) to the application."""
         qss = Template(_TEMPLATE.read_text(encoding="utf-8")).safe_substitute(
             self._tokens)
         self._app.setStyleSheet(qss)
@@ -70,7 +70,18 @@ class ThemeManager(QtCore.QObject):
         size = int(self._tokens.get("font_size_base", 10))
         if family:
             self._app.setFont(QtGui.QFont(family, size))
+        self._apply_icon_theme()
         self.theme_changed.emit()
+
+    def _apply_icon_theme(self) -> None:
+        """Pick a working icon theme; LxQt defaults Qt to near-empty 'hicolor'."""
+        wanted = self._tokens.get("icon_theme", "")
+        for name in (wanted, "Papirus-Dark", "Papirus", "Adwaita"):
+            if not name:
+                continue
+            QtGui.QIcon.setThemeName(name)
+            if not QtGui.QIcon.fromTheme("application-x-executable").isNull():
+                return
 
     # --- mutators (persist + re-apply) ------------------------------------
     def set_theme(self, name: str) -> None:

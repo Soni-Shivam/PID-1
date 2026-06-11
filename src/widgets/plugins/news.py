@@ -2,12 +2,54 @@
 
 Lists headlines from the CMS feed; clicking one opens its URL. Re-renders when
 the CmsService emits content_updated, so a background refresh updates it live.
-Colours come from the live theme tokens and restyle on theme_changed (Phase D).
+Each row carries an accent marker, headline and a muted source line; colours come
+from the live theme tokens and restyle on theme_changed (Phase D).
 """
 from __future__ import annotations
 
-from core.qt_compat import Qt, QtWidgets
+from core.qt_compat import Qt, QtCore, QtWidgets
 from widgets.engine import WidgetContext, WidgetPlugin
+
+
+class _NewsRow(QtWidgets.QFrame):
+    """A clickable headline entry: accent marker + headline + source."""
+
+    clicked = QtCore.pyqtSignal()
+
+    def __init__(self, entry: dict, tokens: dict) -> None:
+        super().__init__()
+        self.setObjectName("newsRow")
+        self.setAttribute(Qt.WA_StyledBackground, True)
+        self.setCursor(Qt.PointingHandCursor)
+        self.setStyleSheet(
+            f"#newsRow{{background:transparent;border:none;border-radius:10px;}}"
+            f"#newsRow:hover{{background:{tokens['hover']};}}")
+        row = QtWidgets.QHBoxLayout(self)
+        row.setContentsMargins(10, 8, 10, 8)
+        row.setSpacing(10)
+
+        bar = QtWidgets.QLabel()
+        bar.setFixedWidth(3)
+        bar.setStyleSheet(
+            f"background:{tokens['accent']};border-radius:2px;")
+        row.addWidget(bar)
+
+        text = QtWidgets.QVBoxLayout()
+        text.setSpacing(1)
+        head = QtWidgets.QLabel(entry.get("headline", ""))
+        head.setWordWrap(True)
+        head.setStyleSheet(
+            f"color:{tokens['text']};font-size:12px;font-weight:600;")
+        src = QtWidgets.QLabel(entry.get("source", ""))
+        src.setStyleSheet(f"color:{tokens['muted']};font-size:10px;")
+        text.addWidget(head)
+        text.addWidget(src)
+        row.addLayout(text, 1)
+
+    def mousePressEvent(self, e) -> None:  # noqa: N802
+        if e.button() == Qt.LeftButton:
+            self.clicked.emit()
+        super().mousePressEvent(e)
 
 
 class _News(QtWidgets.QFrame):
@@ -16,12 +58,12 @@ class _News(QtWidgets.QFrame):
         self._ctx = ctx
         self._content: dict = {}
         self._lay = QtWidgets.QVBoxLayout(self)
-        self._lay.setContentsMargins(18, 16, 18, 16)
-        self._lay.setSpacing(8)
-        self._title = QtWidgets.QLabel("Top Headlines")
+        self._lay.setContentsMargins(22, 20, 22, 20)
+        self._lay.setSpacing(10)
+        self._title = QtWidgets.QLabel()
         self._lay.addWidget(self._title)
         self._items = QtWidgets.QVBoxLayout()
-        self._items.setSpacing(6)
+        self._items.setSpacing(2)
         self._lay.addLayout(self._items)
         self._lay.addStretch(1)
 
@@ -33,32 +75,25 @@ class _News(QtWidgets.QFrame):
 
     def _apply_theme(self) -> None:
         t = self._ctx.theme.tokens
-        self._title.setStyleSheet(f"color:{t['text']};font-size:16px;font-weight:700;")
+        self._title.setText(
+            f"<span style='color:{t['accent']};'>▍</span> "
+            f"<span style='color:{t['text']};font-size:15px;font-weight:700;'>"
+            f"Top Headlines</span>")
         self._render(self._content)
 
     def _render(self, content: dict) -> None:
         self._content = content or {}
+        t = self._ctx.theme.tokens
         while self._items.count():
             item = self._items.takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
         for entry in self._content.get("news", [])[:6]:
-            self._items.addWidget(self._row(entry))
-
-    def _row(self, entry: dict) -> QtWidgets.QWidget:
-        t = self._ctx.theme.tokens
-        btn = QtWidgets.QToolButton()
-        btn.setText(f"{entry.get('headline', '')}\n{entry.get('source', '')}")
-        btn.setCursor(Qt.PointingHandCursor)
-        btn.setToolButtonStyle(Qt.ToolButtonTextOnly)
-        btn.setStyleSheet(
-            f"QToolButton{{text-align:left;border:none;border-radius:8px;"
-            f"padding:6px 8px;color:{t['text']};font-size:12px;}}"
-            f"QToolButton:hover{{background:{t['hover']};}}")
-        url = entry.get("url", "")
-        if url:
-            btn.clicked.connect(lambda: self._ctx.run_action(f"url:{url}"))
-        return btn
+            row = _NewsRow(entry, t)
+            url = entry.get("url", "")
+            if url:
+                row.clicked.connect(lambda u=url: self._ctx.run_action(f"url:{u}"))
+            self._items.addWidget(row)
 
 
 class NewsPlugin(WidgetPlugin):

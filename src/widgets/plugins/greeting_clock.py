@@ -78,6 +78,8 @@ class _GreetingClock(QtWidgets.QFrame):
 class GreetingClockPlugin(WidgetPlugin):
     id = "greeting_clock"
     name = "Greeting & Clock"
+    description = "Personalized greeting with your name and a live clock."
+    icon = "preferences-system-time"
     default_size = (1, 1)
 
     def create_view(self, ctx: WidgetContext) -> QtWidgets.QWidget:

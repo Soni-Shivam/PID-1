@@ -7,7 +7,11 @@
  */
 
 /* --- dock ------------------------------------------------------------- */
-#DockRoot { background: $surface; border: 1px solid $border; border-radius: 14px; }
+#DockRoot {
+    background: $dock_bg;
+    border: 1px solid $dock_border;
+    border-radius: 14px;
+}
 QToolButton[dockbtn="true"] {
     border: none; border-radius: 12px; background: transparent; padding: 2px;
 }
@@ -57,9 +61,18 @@ QListView::item:hover { background: $hover; }
 QListView::item:selected { background: $accent_soft; color: $text; }
 
 /* --- desktop layer (wallpaper + widget cards) ------------------------- */
-#desktopRoot { background: $wallpaper; }
+/* #desktopRoot background is painted by paintEvent (gradient); transparent here. */
+#desktopRoot { background: transparent; }
 QFrame[card="true"] {
-    background: $surface; border: 1px solid $border; border-radius: 18px;
+    background: $card_bg;
+    border: 1px solid $card_border;
+    border-radius: 18px;
+}
+
+/* --- widget management panel ------------------------------------------ */
+#WidgetPanelHeader {
+    background: $surface_alt;
+    border-bottom: 1px solid $border;
 }
 
 /* --- shared controls (settings dialog, widget library, etc.) --------- */

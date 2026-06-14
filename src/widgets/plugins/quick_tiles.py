@@ -78,6 +78,8 @@ class _QuickTiles(QtWidgets.QFrame):
 class QuickTilesPlugin(WidgetPlugin):
     id = "quick_tiles"
     name = "Quick Launch Tiles"
+    description = "One-tap shortcuts to your most used apps and actions."
+    icon = "view-grid"
     default_size = (1, 1)
     needs_cms = True
 

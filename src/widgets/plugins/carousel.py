@@ -135,6 +135,8 @@ class _Carousel(QtWidgets.QFrame):
 class CarouselPlugin(WidgetPlugin):
     id = "carousel"
     name = "Featured Carousel"
+    description = "Rotating featured content cards from the JioPC content feed."
+    icon = "media-playback-start"
     default_size = (1, 2)
     needs_cms = True
 

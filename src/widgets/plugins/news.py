@@ -99,6 +99,8 @@ class _News(QtWidgets.QFrame):
 class NewsPlugin(WidgetPlugin):
     id = "news"
     name = "News & Headlines"
+    description = "Live top headlines from the JioPC content feed."
+    icon = "news-subscribe"
     default_size = (1, 2)
     needs_cms = True
 

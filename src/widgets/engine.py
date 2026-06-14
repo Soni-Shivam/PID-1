@@ -36,6 +36,8 @@ class WidgetPlugin(ABC):
 
     id: str = ""
     name: str = ""
+    description: str = ""
+    icon: str = "application-x-executable"
     default_size: tuple[int, int] = (1, 1)   # (cols, rows) in grid units
     needs_cms: bool = False
 

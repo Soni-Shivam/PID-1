@@ -30,6 +30,7 @@ import time
 from core.qt_compat import Qt, QtCore, QtGui, QtWidgets
 from core import x11
 from core.background import paint_background
+from core.colors import to_qcolor
 from core.theme import ThemeManager
 from apps import launcher
 from dock.model import DockModel
@@ -142,10 +143,14 @@ class DockButton(QtWidgets.QToolButton):
         t        = self._theme.tokens
         boundary = max(0, min(self.height(), _PILL_TOP - self.y()))  # shelf line
 
-        # below the shelf line: pill colour (seamless with the pill shelf)
+        # below the shelf line: pill colour (seamless with the pill shelf).
+        # to_qcolor is mandatory: dock_bg is an rgba() token and bare QColor()
+        # would render it as opaque BLACK (the "black box per icon"). Force full
+        # opacity so the WA_OpaquePaintEvent box leaves no backing-store gaps.
         if boundary < self.height():
-            p.fillRect(0, boundary, self.width(), self.height() - boundary,
-                       QtGui.QColor(t.get("dock_bg", t.get("surface", "#181b22"))))
+            col = to_qcolor(t.get("dock_bg") or t.get("surface", "#181b22"))
+            col.setAlpha(255)
+            p.fillRect(0, boundary, self.width(), self.height() - boundary, col)
         # above the shelf line: the desktop's own background, screen-aligned
         if boundary > 0:
             gpos = self.mapToGlobal(QtCore.QPoint(0, 0))
@@ -165,7 +170,7 @@ class DockButton(QtWidgets.QToolButton):
 
         if self._running:
             t      = self._theme.tokens
-            accent = QtGui.QColor(t.get("indicator", "#5b9bff"))
+            accent = to_qcolor(t.get("indicator", "#5b9bff"))
             halo   = QtGui.QColor(accent); halo.setAlpha(55)
             cx = self.width() // 2
             cy = self.height() - DOT_HALO // 2 - 3

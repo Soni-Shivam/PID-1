@@ -15,6 +15,7 @@ All colours come from theme tokens; no inline hex literals are authoritative
 from __future__ import annotations
 
 from core.qt_compat import QtCore, QtGui
+from core.colors import to_qcolor
 
 
 def paint_background(p: QtGui.QPainter, w: int, h: int, tokens: dict,
@@ -31,9 +32,9 @@ def paint_background(p: QtGui.QPainter, w: int, h: int, tokens: dict,
     rect = QtCore.QRect(0, 0, w, h)
 
     # Layer 1 — diagonal gradient (four distinct stops)
-    c0 = QtGui.QColor(tokens.get("gradient_top",    "#080c1a"))
-    c1 = QtGui.QColor(tokens.get("gradient_mid",    "#0b1020"))
-    c2 = QtGui.QColor(tokens.get("gradient_bottom", "#0d1326"))
+    c0 = to_qcolor(tokens.get("gradient_top",    "#080c1a"))
+    c1 = to_qcolor(tokens.get("gradient_mid",    "#0b1020"))
+    c2 = to_qcolor(tokens.get("gradient_bottom", "#0d1326"))
     c3 = QtGui.QColor(c2).lighter(115)
     base = QtGui.QLinearGradient(0, 0, w, h)
     base.setColorAt(0.00, c0)
@@ -43,7 +44,7 @@ def paint_background(p: QtGui.QPainter, w: int, h: int, tokens: dict,
     p.fillRect(rect, base)
 
     # Layer 2 — top-left radial glow (large, soft)
-    glow_tl      = QtGui.QColor(tokens.get("glow_tl", "rgba(91,155,255,0.18)"))
+    glow_tl      = to_qcolor(tokens.get("glow_tl", "rgba(91,155,255,0.18)"))
     glow_tl_fade = QtGui.QColor(glow_tl); glow_tl_fade.setAlpha(0)
     g1 = QtGui.QRadialGradient(int(w * 0.05), int(h * 0.03), int(max(w, h) * 0.55))
     g1.setColorAt(0.0, glow_tl)
@@ -53,7 +54,7 @@ def paint_background(p: QtGui.QPainter, w: int, h: int, tokens: dict,
     p.fillRect(rect, g1)
 
     # Layer 3 — bottom-right radial glow (medium)
-    glow_br      = QtGui.QColor(tokens.get("glow_br", "rgba(23,58,94,0.25)"))
+    glow_br      = to_qcolor(tokens.get("glow_br", "rgba(23,58,94,0.25)"))
     glow_br_fade = QtGui.QColor(glow_br); glow_br_fade.setAlpha(0)
     g2 = QtGui.QRadialGradient(int(w * 0.94), int(h * 0.92), int(max(w, h) * 0.45))
     g2.setColorAt(0.0, glow_br)
@@ -63,7 +64,7 @@ def paint_background(p: QtGui.QPainter, w: int, h: int, tokens: dict,
     p.fillRect(rect, g2)
 
     # Layer 4 — dot-grid texture (1.5 px dots every 38 px, very subtle)
-    dot_col = QtGui.QColor(tokens.get("text", "#eef1f6")); dot_col.setAlpha(9)
+    dot_col = to_qcolor(tokens.get("text", "#eef1f6")); dot_col.setAlpha(9)
     p.setPen(QtGui.QPen(dot_col, 1.5))
     step = 38
     pts = [QtCore.QPoint(gx, gy)

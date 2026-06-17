@@ -4,26 +4,39 @@
  * the matching token value from the active theme JSON) and applied app-wide with
  * QApplication.setStyleSheet. Per-widget plugin looks are themed inside each
  * plugin from ctx.theme.tokens instead.
+ *
+ * Glass design language (compositor-free, CPU-only):
+ *  - Depth is faked with a 1px translucent edge ($glass_border) over the darker
+ *    background, never with drop shadows or software blur.
+ *  - Surfaces carry a subtle vertical QLinearGradient: a faint bright sheen
+ *    ($glass_sheen) at the very top edge fading into the body colour, so light
+ *    appears to catch the top lip like real glass. Gradients are 2-3 stops only
+ *    to keep per-paint cost trivial; static chrome paints once (0% idle).
+ *  - Generous border-radius gives the smart-TV / tablet feel.
  */
 
 /* --- dock ------------------------------------------------------------- */
 #DockRoot {
-    background: $dock_bg;
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+        stop:0 $glass_sheen, stop:0.08 $dock_bg, stop:1 $dock_bg);
     border: 1px solid $dock_border;
-    border-radius: 14px;
+    border-radius: 18px;
 }
 QToolButton[dockbtn="true"] {
     border: none; border-radius: 12px; background: transparent; padding: 2px;
 }
 QToolButton[dockbtn="true"]:hover { background: $hover; }
 QToolButton#DockGrid {
-    border: none; border-radius: 12px; background: $accent_soft;
+    border: 1px solid $glass_border; border-radius: 12px; background: $accent_soft;
     color: $accent; font-size: 22px;
 }
 QToolButton#DockGrid:hover { background: $accent; color: $on_accent; }
 
 /* --- application menu ------------------------------------------------- */
-#MenuRoot { background: $bg; }
+#MenuRoot {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+        stop:0 $surface, stop:0.55 $bg, stop:1 $bg);
+}
 #MenuBody { background: transparent; }
 #Greeting {
     color: $text; font-size: 28px; font-weight: 800; background: transparent;
@@ -33,7 +46,9 @@ QToolButton#DockGrid:hover { background: $accent; color: $on_accent; }
     color: $muted; font-size: 14px; background: transparent; padding-left: 3px;
 }
 #Search {
-    background: $surface; color: $text; border: 1px solid $border;
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+        stop:0 $surface_alt, stop:1 $surface);
+    color: $text; border: 1px solid $glass_border;
     border-radius: 24px; padding: 14px 22px; font-size: 17px;
     selection-background-color: $accent; selection-color: $on_accent;
 }
@@ -47,7 +62,9 @@ QLabel#Section {
 
 /* category chips */
 QPushButton[chip="true"] {
-    background: $surface; color: $muted; border: 1px solid $border;
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+        stop:0 $surface_alt, stop:1 $surface);
+    color: $muted; border: 1px solid $glass_border;
     border-radius: 15px; padding: 6px 16px; font-size: 12px; font-weight: 600;
 }
 QPushButton[chip="true"]:hover { color: $text; border: 1px solid $accent; }
@@ -73,10 +90,13 @@ QListView::item:hover { background: $hover; }
 QListView::item:selected { background: $accent_soft; color: $text; }
 
 /* --- desktop layer (wallpaper + widget cards) ------------------------- */
-/* #desktopRoot background is painted by paintEvent (gradient); transparent here. */
+/* #desktopRoot background is painted by paintEvent (gradient); transparent here.
+ * Cards are pseudo-glass: a semi-transparent body ($card_bg) over the painted
+ * desktop gradient, a top sheen, and a bright 1px edge for depth (no shadow). */
 #desktopRoot { background: transparent; }
 QFrame[card="true"] {
-    background: $card_bg;
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+        stop:0 $glass_sheen, stop:0.06 $card_bg, stop:1 $card_bg);
     border: 1px solid $card_border;
     border-radius: 18px;
 }
@@ -84,7 +104,7 @@ QFrame[card="true"] {
 /* --- widget management panel ------------------------------------------ */
 #WidgetPanelHeader {
     background: $surface_alt;
-    border-bottom: 1px solid $border;
+    border-bottom: 1px solid $glass_border;
 }
 
 /* --- shared controls (settings dialog, widget library, etc.) --------- */
@@ -92,18 +112,22 @@ QDialog { background: $bg; }
 QCheckBox { color: $text; spacing: 8px; padding: 4px; }
 QCheckBox::indicator {
     width: 18px; height: 18px; border-radius: 5px;
-    border: 1px solid $border; background: $surface;
+    border: 1px solid $glass_border; background: $surface;
 }
 QCheckBox::indicator:checked { background: $accent; border: 1px solid $accent; }
 QLineEdit {
-    background: $surface; color: $text; border: 1px solid $border;
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+        stop:0 $surface_alt, stop:1 $surface);
+    color: $text; border: 1px solid $glass_border;
     border-radius: 9px; padding: 7px 12px;
     selection-background-color: $accent; selection-color: $on_accent;
 }
 QLineEdit:focus { border: 1px solid $accent; }
 
 QComboBox, QSpinBox, QFontComboBox {
-    background: $surface; color: $text; border: 1px solid $border;
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+        stop:0 $surface_alt, stop:1 $surface);
+    color: $text; border: 1px solid $glass_border;
     border-radius: 10px; padding: 6px 12px; min-height: 20px;
 }
 QComboBox:hover, QSpinBox:hover, QFontComboBox:hover { border: 1px solid $accent; }
@@ -114,17 +138,19 @@ QComboBox::drop-down, QFontComboBox::drop-down {
 }
 QComboBox QAbstractItemView {
     background: $surface; color: $text; selection-background-color: $accent;
-    selection-color: $on_accent; border: 1px solid $border; border-radius: 8px;
+    selection-color: $on_accent; border: 1px solid $glass_border; border-radius: 8px;
     padding: 4px; outline: none;
 }
 QSpinBox::up-button, QSpinBox::down-button { width: 16px; border: none; }
 
 /* default (secondary) buttons */
 QPushButton {
-    background: $surface; color: $text; border: 1px solid $border;
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+        stop:0 $surface_alt, stop:1 $surface);
+    color: $text; border: 1px solid $glass_border;
     border-radius: 10px; padding: 7px 16px; font-weight: 600;
 }
-QPushButton:hover { background: $hover; border: 1px solid $accent; }
+QPushButton:hover { border: 1px solid $accent; }
 QPushButton:pressed { background: $accent_soft; }
 QPushButton:default {
     background: $accent; color: $on_accent; border: 1px solid $accent;
@@ -133,15 +159,17 @@ QPushButton:default:hover { background: $accent; border: 1px solid $on_accent; }
 
 /* --- popups ----------------------------------------------------------- */
 QMenu {
-    background: $surface; color: $text; border: 1px solid $border;
-    border-radius: 10px; padding: 6px;
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+        stop:0 $surface_alt, stop:1 $surface);
+    color: $text; border: 1px solid $glass_border;
+    border-radius: 12px; padding: 6px;
 }
 QMenu::item { padding: 7px 22px; border-radius: 7px; }
 QMenu::item:selected { background: $accent; color: $on_accent; }
-QMenu::separator { height: 1px; background: $border; margin: 5px 8px; }
+QMenu::separator { height: 1px; background: $glass_border; margin: 5px 8px; }
 QToolTip {
-    background: $surface; color: $text; border: 1px solid $border;
-    border-radius: 6px; padding: 5px 9px;
+    background: $surface; color: $text; border: 1px solid $glass_border;
+    border-radius: 8px; padding: 5px 9px;
 }
 
 /* --- scrollbars ------------------------------------------------------- */

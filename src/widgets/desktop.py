@@ -371,15 +371,15 @@ class DesktopLayer(QtWidgets.QWidget):
         old.deleteLater()
 
     def _wrap(self, view: QtWidgets.QWidget) -> QtWidgets.QWidget:
-        """Apply card QSS property + software drop-shadow."""
+        """Mark the view as a glass card.
+
+        Depth comes from the QSS recipe (1px translucent edge + top sheen over
+        the darker desktop gradient), not a drop shadow: a software shadow blur
+        is exactly the CPU-only cost the no-compositor design avoids, and it
+        re-blurs on every card repaint. The bright border carries the depth cue
+        instead, consistent with the rest of the shell."""
         view.setProperty("card", True)
         view.setAttribute(Qt.WA_StyledBackground, True)
-        shadow = QtWidgets.QGraphicsDropShadowEffect(view)
-        shadow.setBlurRadius(24)
-        shadow.setOffset(0, 5)
-        shadow.setColor(QtGui.QColor(
-            self._theme.tokens.get("shadow_color", "rgba(0,0,0,0.45)")))
-        view.setGraphicsEffect(shadow)
         return view
 
     def _run_action(self, action: str) -> None:

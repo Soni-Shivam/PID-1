@@ -2,9 +2,14 @@
 
 Cycles through featured cards (title, subtitle, call-to-action). Auto-advances
 every 8 s but only while visible (the timer stops on hide), to respect the idle
-CPU budget. Prev/next arrows and page dots for manual control. Transitions are
-instant (no compositor); a slide animation is a possible polish follow-up.
-Colours come from the live theme tokens and restyle on theme_changed (Phase D).
+CPU budget. Prev/next arrows and page dots for manual control.
+
+Card-to-card transitions cross-fade the headline text via a QGraphicsOpacity
+effect: the new card is set at the fade trough so there is no flicker. The
+effect is software-composited by Qt (no X compositor needed) and animates a
+small static text block for ~330 ms, so the periodic cost stays negligible.
+Each transition's animations are parented + DeleteWhenStopped, so nothing
+accumulates across advances. Colours come from theme tokens (Phase D).
 """
 from __future__ import annotations
 
@@ -12,6 +17,8 @@ from core.qt_compat import Qt, QtCore, QtWidgets
 from widgets.engine import WidgetContext, WidgetPlugin
 
 _INTERVAL_MS = 8000
+_FADE_OUT_MS = 130
+_FADE_IN_MS = 210
 
 
 class _Carousel(QtWidgets.QFrame):
@@ -25,18 +32,31 @@ class _Carousel(QtWidgets.QFrame):
         root = QtWidgets.QVBoxLayout(self)
         root.setContentsMargins(28, 26, 28, 20)
         root.setSpacing(6)
+
+        # Text block grouped so a single opacity effect can cross-fade it.
+        self._textwrap = QtWidgets.QWidget()
+        self._textwrap.setAttribute(Qt.WA_StyledBackground, False)
+        tw = QtWidgets.QVBoxLayout(self._textwrap)
+        tw.setContentsMargins(0, 0, 0, 0)
+        tw.setSpacing(6)
         self._eyebrow = QtWidgets.QLabel("FEATURED")
         self._title = QtWidgets.QLabel()
         self._title.setWordWrap(True)
         self._subtitle = QtWidgets.QLabel()
         self._subtitle.setWordWrap(True)
+        tw.addWidget(self._eyebrow)
+        tw.addWidget(self._title)
+        tw.addWidget(self._subtitle)
+
+        self._opacity = QtWidgets.QGraphicsOpacityEffect(self._textwrap)
+        self._opacity.setOpacity(1.0)
+        self._textwrap.setGraphicsEffect(self._opacity)
+
         self._cta = QtWidgets.QPushButton()
         self._cta.setCursor(Qt.PointingHandCursor)
         self._cta.clicked.connect(self._activate_cta)
 
-        root.addWidget(self._eyebrow)
-        root.addWidget(self._title)
-        root.addWidget(self._subtitle)
+        root.addWidget(self._textwrap)
         root.addStretch(1)
         bottom = QtWidgets.QHBoxLayout()
         bottom.addWidget(self._cta, 0, Qt.AlignLeft)
@@ -112,9 +132,35 @@ class _Carousel(QtWidgets.QFrame):
             for i in range(len(self._cards))))
 
     def _advance(self, step: int) -> None:
-        if self._cards:
-            self._index = (self._index + step) % len(self._cards)
-            self._show()
+        if len(self._cards) < 2:
+            return
+        self._index = (self._index + step) % len(self._cards)
+        if self.isVisible():
+            self._animate_swap()
+        else:
+            self._show()   # off-screen: no point animating
+
+    def _animate_swap(self) -> None:
+        """Cross-fade the text block: fade out, swap content at the trough,
+        fade back in. Animations are parented and DeleteWhenStopped so each
+        advance leaves nothing behind."""
+        out = QtCore.QPropertyAnimation(self._opacity, b"opacity", self)
+        out.setDuration(_FADE_OUT_MS)
+        out.setStartValue(self._opacity.opacity())
+        out.setEndValue(0.0)
+        out.setEasingCurve(QtCore.QEasingCurve.InCubic)
+
+        fade_in = QtCore.QPropertyAnimation(self._opacity, b"opacity", self)
+        fade_in.setDuration(_FADE_IN_MS)
+        fade_in.setStartValue(0.0)
+        fade_in.setEndValue(1.0)
+        fade_in.setEasingCurve(QtCore.QEasingCurve.OutCubic)
+
+        out.finished.connect(self._show)   # set new card while invisible
+        group = QtCore.QSequentialAnimationGroup(self)
+        group.addAnimation(out)
+        group.addAnimation(fade_in)
+        group.start(QtCore.QAbstractAnimation.DeleteWhenStopped)
 
     def _activate_cta(self) -> None:
         if self._cards:

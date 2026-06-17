@@ -24,6 +24,7 @@ from core.theme import ThemeManager
 from apps.desktop_entries import list_apps
 from widgets import engine
 from widgets.engine import WidgetContext
+from widgets.landing import LandingView
 
 
 def _username() -> str:
@@ -326,46 +327,27 @@ class DesktopLayer(QtWidgets.QWidget):
 
     # --- grid -------------------------------------------------------------
     def _build_grid(self) -> None:
+        """Host the landing dashboard (Component A) full-bleed in the layer.
+
+        The CMS-fed LandingView replaces the old free plugin grid as the desktop
+        content; the widget engine/plugins remain discovered for the Widget
+        Library. Its Customise button opens the widget panel."""
         old             = self._grid_host
         self._grid_host = QtWidgets.QWidget(self)
         self._grid_host.setGeometry(self.rect())
 
-        grid = QtWidgets.QGridLayout(self._grid_host)
-        grid.setContentsMargins(40, 36, 40, 36)
-        grid.setSpacing(20)
-
-        rows_used: set[int] = set()
-        cols_used: set[int] = set()
-        max_col = 0
-
-        for item in self._layout:
-            plugin = self._plugins.get(item["plugin_id"])
-            if not plugin:
-                continue
-            ctx = WidgetContext(
-                cms        = self._cms if plugin.needs_cms else None,
-                run_action = self._run_action,
-                username   = self._username,
-                theme      = self._theme,
-            )
-            card = self._wrap(plugin.create_view(ctx))
-            grid.addWidget(card,
-                           item["row"], item["col"],
-                           item["h"],   item["w"])
-            rows_used.add(item["row"])
-            for r in range(item["row"], item["row"] + item["h"]):
-                rows_used.add(r)
-            for c in range(item["col"], item["col"] + item["w"]):
-                cols_used.add(c)
-            max_col = max(max_col, item["col"] + item["w"])
-
-        # Column stretches: first column narrower, rest equal
-        for c in range(max_col):
-            grid.setColumnStretch(c, 1 if c == 0 else 3)
-
-        # Row stretches: all rows equal
-        for r in sorted(rows_used):
-            grid.setRowStretch(r, 1)
+        lay = QtWidgets.QVBoxLayout(self._grid_host)
+        lay.setContentsMargins(0, 0, 0, 0)
+        ctx = WidgetContext(
+            cms        = self._cms,
+            run_action = self._run_action,
+            username   = self._username,
+            theme      = self._theme,
+        )
+        self._landing = LandingView(ctx)
+        self._landing.customise_requested.connect(
+            lambda: self._panel.open_panel())
+        lay.addWidget(self._landing)
 
         self._grid_host.show()
         old.deleteLater()

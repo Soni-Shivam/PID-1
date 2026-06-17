@@ -24,12 +24,21 @@ QToolButton#DockGrid:hover { background: $accent; color: $on_accent; }
 
 /* --- application menu ------------------------------------------------- */
 #MenuRoot { background: $bg; }
+#MenuBody { background: transparent; }
+#Greeting {
+    color: $text; font-size: 28px; font-weight: 800; background: transparent;
+    padding-left: 2px;
+}
+#GreetingSub {
+    color: $muted; font-size: 14px; background: transparent; padding-left: 3px;
+}
 #Search {
     background: $surface; color: $text; border: 1px solid $border;
-    border-radius: 22px; padding: 13px 20px; font-size: 17px;
+    border-radius: 24px; padding: 14px 22px; font-size: 17px;
     selection-background-color: $accent; selection-color: $on_accent;
 }
-#Search:focus { border: 1px solid $accent; }
+#Search:hover { border: 1px solid $muted; }
+#Search:focus { border: 2px solid $accent; padding: 13px 21px; }
 QLabel { color: $muted; background: transparent; }
 QLabel#Section {
     color: $text; font-size: 13px; font-weight: 700; padding-left: 2px;
@@ -49,9 +58,12 @@ QPushButton[chip="true"]:checked {
 /* grid tiles + strip tiles */
 QToolButton[tile="true"] {
     background: transparent; color: $text; border: 1px solid transparent;
-    border-radius: 12px; font-size: 11px; padding: 4px;
+    border-radius: 14px; font-size: 11px; padding: 6px;
 }
-QToolButton[tile="true"]:hover { background: $hover; border: 1px solid $border; }
+QToolButton[tile="true"]:hover {
+    background: $accent_soft; border: 1px solid $accent; color: $accent;
+}
+QToolButton[tile="true"]:pressed { background: $hover; }
 QListView {
     background: transparent; color: $text; border: none; font-size: 11px;
     outline: none;

@@ -9,24 +9,17 @@ from __future__ import annotations
 
 import time
 
+from core import user
 from core.qt_compat import QtCore, QtWidgets
 from widgets.engine import WidgetContext, WidgetPlugin
-
-
-def _salutation(hour: int) -> str:
-    if hour < 12:
-        return "Good morning"
-    if hour < 17:
-        return "Good afternoon"
-    return "Good evening"
 
 
 class _GreetingClock(QtWidgets.QFrame):
     def __init__(self, ctx: WidgetContext) -> None:
         super().__init__()
         self._ctx = ctx
-        username = ctx.username
-        self._username = username.split()[0] if username else "there"
+        self._username = (ctx.username.split()[0] if ctx.username
+                          else user.first_name())
         lay = QtWidgets.QVBoxLayout(self)
         lay.setContentsMargins(26, 24, 26, 24)
         lay.setSpacing(2)
@@ -60,7 +53,7 @@ class _GreetingClock(QtWidgets.QFrame):
         now = time.localtime()
         self._greet.setText(
             f"<span style='color:{t['muted']};font-size:17px;font-weight:600;'>"
-            f"{_salutation(now.tm_hour)}, </span>"
+            f"{user.salutation(now.tm_hour)}, </span>"
             f"<span style='color:{t['accent']};font-size:17px;font-weight:700;'>"
             f"{self._username}</span>")
         self._clock.setText(time.strftime("%I:%M %p", now).lstrip("0"))

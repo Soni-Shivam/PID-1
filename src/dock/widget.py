@@ -433,8 +433,9 @@ class DockWindow(QtWidgets.QWidget):
         pill_path.addRoundedRect(QtCore.QRectF(0, 0, pill_w, PILL_H), RADIUS, RADIUS)
         self._pill.setMask(QtGui.QRegion(pill_path.toFillPolygon().toPolygon()))
 
-        key = (left, pill_w,
-               tuple((g.left(), g.top(), g.width()) for g in geos))
+        key = (left, pill_w, tuple(
+            (g.left(), g.top(), g.width(), getattr(b, "_running", False))
+            for b, g in zip(order, geos)))
         if key == self._mask_key:
             return
         self._mask_key = key
@@ -443,10 +444,26 @@ class DockWindow(QtWidgets.QWidget):
         outer.addRoundedRect(QtCore.QRectF(left, _PILL_TOP, pill_w, PILL_H),
                              RADIUS, RADIUS)
         region = QtGui.QRegion(outer.toFillPolygon().toPolygon())
-        for g in geos:
-            if g.top() < _PILL_TOP:    # box overflows above the pill
+        # Above the shelf, cut the mask TIGHTLY to the scaled icon — not the
+        # full layout box. The box is ~BTN*s wide but the icon is only
+        # ~ICON_SIZE*s, so masking the box exposed a wide strip of painted
+        # fake-background on each side that read as a hard rectangle. Hugging
+        # the icon excludes that strip, so the genuine X11 desktop (and any
+        # window behind the dock) shows there instead.
+        PAD_AA = 2   # spare px so the icon's antialiased edge is not clipped
+        for b, g in zip(order, geos):
+            if g.top() >= _PILL_TOP:
+                continue
+            s       = getattr(b, "_cur_scale", 1.0)
+            icon_px = max(6, round(ICON_SIZE * s))
+            dot_res = (DOT_HALO // 2 + 6) if getattr(b, "_running", False) else 4
+            icon_x  = g.left() + (g.width() - icon_px) // 2
+            icon_y  = g.top()  + g.height() - icon_px - dot_res
+            top     = max(g.top(), icon_y - PAD_AA)
+            h       = _PILL_TOP - top
+            if h > 0:
                 region = region.united(QtGui.QRegion(
-                    QtCore.QRect(g.left(), g.top(), g.width(), _PILL_TOP - g.top())))
+                    icon_x - PAD_AA, top, icon_px + 2 * PAD_AA, h))
         self.setMask(region)
 
     # ── animation driver ─────────────────────────────────────────────

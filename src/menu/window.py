@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import math
 
+from core import user
 from core.qt_compat import Qt, QtCore, QtGui, QtWidgets
 from core.theme import ThemeManager
 from apps import launcher
@@ -59,7 +60,10 @@ def _tile(app: AppEntry, launch_cb) -> QtWidgets.QToolButton:
     btn.setToolTip(app.comment or app.name)
     btn.setCursor(Qt.PointingHandCursor)
     btn.setProperty("tile", True)
-    btn.clicked.connect(launch_cb)
+    # clicked() emits a `checked` bool; swallow it so it can't be passed into
+    # the callback's bound AppEntry argument (that turned `app` into a bool and
+    # broke launching).
+    btn.clicked.connect(lambda *_: launch_cb())
     return btn
 
 
@@ -123,9 +127,26 @@ class MenuWindow(QtWidgets.QWidget):
 
     # --- UI construction --------------------------------------------------
     def _build_ui(self) -> None:
-        outer = QtWidgets.QVBoxLayout(self)
-        outer.setContentsMargins(48, 36, 48, 0)
-        outer.setSpacing(12)
+        # A single body widget holds all content so the open animation (opacity
+        # + rise) can target it without affecting the solid MenuRoot backdrop.
+        shell = QtWidgets.QVBoxLayout(self)
+        shell.setContentsMargins(0, 0, 0, 0)
+        self._body = QtWidgets.QWidget()
+        self._body.setObjectName("MenuBody")
+        shell.addWidget(self._body)
+
+        outer = QtWidgets.QVBoxLayout(self._body)
+        outer.setContentsMargins(56, 30, 56, 0)
+        outer.setSpacing(10)
+
+        # --- Personalised greeting header ---
+        self._greeting = QtWidgets.QLabel()
+        self._greeting.setObjectName("Greeting")
+        self._greeting_sub = QtWidgets.QLabel("What would you like to open?")
+        self._greeting_sub.setObjectName("GreetingSub")
+        outer.addWidget(self._greeting)
+        outer.addWidget(self._greeting_sub)
+        outer.addSpacing(8)
 
         # --- Fixed header (search + chips + controls) ---
         self.search = QtWidgets.QLineEdit()
@@ -229,13 +250,21 @@ class MenuWindow(QtWidgets.QWidget):
         tiles = [_tile(a, lambda a=a: self._launch(a)) for a in apps]
         grid.set_tiles(tiles)
 
+    def _app_at(self, proxy_row: int) -> AppEntry | None:
+        """Resolve a proxy row to its AppEntry via the source model.
+
+        The custom ENTRY role must be read from the (pure-Python) source model,
+        not the proxy: QSortFilterProxyModel.data() routes through C++ QVariant,
+        which cannot round-trip an arbitrary Python object and hands back a bare
+        ``True`` instead of the AppEntry (which then breaks launching).
+        """
+        src = self.proxy.mapToSource(self.proxy.index(proxy_row, 0))
+        return self.model.data(src, ENTRY) if src.isValid() else None
+
     def _rebuild_all_grid(self) -> None:
         """Rebuild the All Apps grid from the current proxy model state."""
-        apps = []
-        for row in range(self.proxy.rowCount()):
-            app = self.proxy.data(self.proxy.index(row, 0), ENTRY)
-            if app:
-                apps.append(app)
+        apps = [a for row in range(self.proxy.rowCount())
+                if (a := self._app_at(row)) is not None]
         tiles = [_tile(a, lambda a=a: self._launch(a)) for a in apps]
         self._all_grid.set_tiles(tiles)
 
@@ -263,7 +292,7 @@ class MenuWindow(QtWidgets.QWidget):
 
     def _launch_first(self) -> None:
         if self.proxy.rowCount():
-            app = self.proxy.data(self.proxy.index(0, 0), ENTRY)
+            app = self._app_at(0)
             if app:
                 self._launch(app)
 
@@ -273,6 +302,41 @@ class MenuWindow(QtWidgets.QWidget):
 
     def _open_settings(self) -> None:
         SettingsDialog(self._theme, self).exec_()
+
+    def _refresh_greeting(self) -> None:
+        self._greeting.setText(f"{user.salutation()}, {user.first_name()}")
+
+    def _play_entrance(self) -> None:
+        """One-shot fade + rise on open. Compositor-free (Qt software-composites
+        the QGraphicsOpacityEffect itself) and removed on finish, so it adds no
+        idle cost — it runs only on this user interaction, under 250 ms."""
+        effect = QtWidgets.QGraphicsOpacityEffect(self._body)
+        self._body.setGraphicsEffect(effect)
+        home = self._body.pos()
+
+        fade = QtCore.QPropertyAnimation(effect, b"opacity", self)
+        fade.setDuration(180)
+        fade.setStartValue(0.0)
+        fade.setEndValue(1.0)
+        fade.setEasingCurve(QtCore.QEasingCurve.OutCubic)
+
+        rise = QtCore.QPropertyAnimation(self._body, b"pos", self)
+        rise.setDuration(240)
+        rise.setStartValue(home + QtCore.QPoint(0, 26))
+        rise.setEndValue(home)
+        rise.setEasingCurve(QtCore.QEasingCurve.OutCubic)
+
+        group = QtCore.QParallelAnimationGroup(self)
+        group.addAnimation(fade)
+        group.addAnimation(rise)
+
+        def _settle() -> None:
+            self._body.setGraphicsEffect(None)
+            self._body.move(home)
+
+        group.finished.connect(_settle)
+        self._entrance = group   # keep a reference alive for the run
+        group.start(QtCore.QAbstractAnimation.DeleteWhenStopped)
 
     # --- live updates -----------------------------------------------------
     def _schedule_reload(self, _path: str) -> None:
@@ -294,6 +358,7 @@ class MenuWindow(QtWidgets.QWidget):
         self.proxy.set_query("")
         self.proxy.set_category("")
         self._set_sections_visible(True)
+        self._refresh_greeting()
         self._refresh_strips()
         self._rebuild_all_grid()
         # Reset scroll to top
@@ -302,3 +367,4 @@ class MenuWindow(QtWidgets.QWidget):
         self.raise_()
         self.activateWindow()
         self.search.setFocus()
+        self._play_entrance()

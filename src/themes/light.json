@@ -26,7 +26,7 @@
   "card_border": "rgba(0,0,0,0.10)",
   "glass_sheen": "rgba(255,255,255,0.85)",
   "glass_border": "rgba(0,0,0,0.10)",
-  "dock_bg": "rgba(255,255,255,0.85)",
+  "dock_bg": "#ffffff",
   "dock_border": "rgba(0,0,0,0.10)",
   "shadow_color": "rgba(0,0,0,0.18)",
   "panel_bg": "rgba(255,255,255,0.97)",

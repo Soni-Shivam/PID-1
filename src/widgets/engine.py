@@ -58,6 +58,7 @@ class WidgetPlugin(ABC):
     description: str = ""
     icon: str = "application-x-executable"
     default_size: tuple[int, int] = (1, 1)   # (cols, rows) in grid units
+    sizes: list[tuple[int, int]] = []        # resize cycle ([] = fixed size)
     needs_cms: bool = False
     category: str = "Information"            # Widget Library pill grouping
     card_chrome: bool = True                 # host wraps view in standard card
@@ -96,12 +97,16 @@ def execute_action(action: str, apps_by_id: dict[str, AppEntry]) -> None:
 
 
 def default_layout() -> list[dict]:
-    """First-run arrangement of the four built-in widgets (col,row,w,h)."""
+    """First-run arrangement on the 3x2 desktop grid (col,row,w,h).
+
+    Five of six slots filled, leaving one (col 2, row 1) free so the Widget
+    Store's "Add to home" works out of the box for the demo.
+    """
     return [
         {"plugin_id": "greeting_clock", "col": 0, "row": 0, "w": 1, "h": 1},
         {"plugin_id": "quick_tiles", "col": 0, "row": 1, "w": 1, "h": 1},
         {"plugin_id": "carousel", "col": 1, "row": 0, "w": 1, "h": 2},
-        {"plugin_id": "news", "col": 2, "row": 0, "w": 1, "h": 2},
+        {"plugin_id": "news", "col": 2, "row": 0, "w": 1, "h": 1},
     ]
 
 

@@ -63,7 +63,7 @@ class _HeroImage(QtWidgets.QLabel):
         # Rounded clip via QSS — no compositor, purely software-painted.
         self.setStyleSheet(
             f"#heroImageLabel{{border-radius:{_RADIUS}px;"
-            "background:transparent;}}"
+            "background:transparent;}"
         )
 
     def load_url(self, url: str) -> None:
@@ -236,7 +236,7 @@ class _Carousel(QtWidgets.QFrame):
         for b in self._nav_btns:
             b.setStyleSheet(
                 f"QToolButton{{color:{t['hero_text']};border:none;"
-                "font-size:20px;padding:0 6px;}}"
+                "font-size:20px;padding:0 6px;}"
             )
         self._show()
 

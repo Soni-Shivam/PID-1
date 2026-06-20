@@ -1,16 +1,14 @@
 """The desktop widget layer (Component C integrator).
 
-A full-screen _NET_WM_WINDOW_TYPE_DESKTOP window (ME-07) that lays out plugin
-views on a proportional grid (layout.json). Right-click opens WidgetPanel — a
-320 px slide-in overlay with per-plugin Add/Remove cards; changes persist live.
+A full-screen _NET_WM_WINDOW_TYPE_DESKTOP window (ME-07) that hosts the
+arrangeable SnapGrid of plugin widgets. A slim top bar carries the Widget Store
+button, a live slot badge, and a light/dark toggle. Right-click also opens the
+store. Content is inset past the left dock strut and the bottom LxQt panel so
+nothing is hidden.
 
-Background: a rich diagonal linear gradient (top-left -> bottom-right) with two
-large overlapping radial glow accents and a sparse dot-grid texture — all painted
-in paintEvent, compositor-free. Widget cards use rgba QSS backgrounds so Qt
-composites them against the gradient within this single window. Drop shadows
-(QGraphicsDropShadowEffect) add depth without a compositor.
-
-All colours come from theme tokens; no inline hex literals appear here.
+Background: a rich diagonal gradient with radial glow accents and a dot-grid,
+painted in paintEvent (compositor-free, core.background). Widget cards are glass
+(rgba QSS over the gradient). All colours come from theme tokens.
 """
 from __future__ import annotations
 
@@ -24,7 +22,12 @@ from core.theme import ThemeManager
 from apps.desktop_entries import list_apps
 from widgets import engine
 from widgets.engine import WidgetContext
-from widgets.landing import LandingView
+from widgets.grid import SnapGrid, WidgetCard, TOTAL_SLOTS
+from widgets.store import WidgetStore
+
+# Insets so grid content clears the left dock and the bottom LxQt panel.
+_DOCK_INSET = 104
+_PANEL_INSET = 52
 
 
 def _username() -> str:
@@ -35,258 +38,28 @@ def _username() -> str:
         return ""
 
 
-# ---------------------------------------------------------------------------
-# Widget management panel
-# ---------------------------------------------------------------------------
-
-class _PluginCard(QtWidgets.QFrame):
-    """Plugin row inside WidgetPanel: icon + name + description + Add/Remove."""
-
-    toggled = QtCore.pyqtSignal(str, bool)   # (plugin_id, True=add / False=remove)
-
-    def __init__(self, plugin, active: bool, theme: ThemeManager) -> None:
-        super().__init__()
-        self._plugin = plugin
-        self._active = active
-        self._theme  = theme
-        self.setAttribute(Qt.WA_StyledBackground, True)
-        self.setObjectName("pluginCard")
-
-        lay = QtWidgets.QHBoxLayout(self)
-        lay.setContentsMargins(14, 12, 14, 12)
-        lay.setSpacing(12)
-
-        # Icon (keep reference so we don't confuse it with label children)
-        self._icon_lbl = QtWidgets.QLabel()
-        px = QtGui.QIcon.fromTheme(plugin.icon).pixmap(36, 36)
-        if px.isNull():
-            px = QtGui.QIcon.fromTheme("application-x-executable").pixmap(36, 36)
-        self._icon_lbl.setPixmap(px)
-        self._icon_lbl.setFixedSize(36, 36)
-        lay.addWidget(self._icon_lbl)
-
-        # Text — store refs directly
-        text = QtWidgets.QVBoxLayout()
-        text.setSpacing(2)
-        self._name_lbl = QtWidgets.QLabel(plugin.name)
-        self._desc_lbl = QtWidgets.QLabel(plugin.description or "")
-        self._desc_lbl.setWordWrap(True)
-        text.addWidget(self._name_lbl)
-        text.addWidget(self._desc_lbl)
-        lay.addLayout(text, 1)
-
-        # Toggle button
-        self._btn = QtWidgets.QPushButton()
-        self._btn.setFixedWidth(84)
-        self._btn.setCursor(Qt.PointingHandCursor)
-        self._btn.clicked.connect(self._on_toggle)
-        lay.addWidget(self._btn)
-
-        self._apply_theme()
-        theme.theme_changed.connect(self._apply_theme)
-
-    def _apply_theme(self) -> None:
-        t = self._theme.tokens
-        bg     = t.get("accent_soft", "#21344f") if self._active else "transparent"
-        border = t.get("accent", "#5b9bff") if self._active else t.get("border", "#2a2e38")
-        self.setStyleSheet(
-            f"QFrame#pluginCard{{background:{bg};border:1px solid {border};"
-            f"border-radius:12px;}}"
-        )
-        self._name_lbl.setStyleSheet(
-            f"color:{t['text']};font-size:13px;font-weight:700;background:transparent;")
-        self._desc_lbl.setStyleSheet(
-            f"color:{t['muted']};font-size:11px;background:transparent;")
-        if self._active:
-            self._btn.setText("Remove")
-            self._btn.setStyleSheet(
-                f"QPushButton{{background:{t['surface']};color:{t['muted']};"
-                f"border:1px solid {t['border']};border-radius:8px;"
-                f"padding:5px 8px;font-size:11px;font-weight:600;}}"
-                f"QPushButton:hover{{color:{t['text']};border-color:{t['accent']};}}"
-            )
-        else:
-            self._btn.setText("Add")
-            self._btn.setStyleSheet(
-                f"QPushButton{{background:{t['accent']};color:{t['on_accent']};"
-                f"border:none;border-radius:8px;"
-                f"padding:5px 8px;font-size:11px;font-weight:700;}}"
-                f"QPushButton:hover{{background:{t['accent_soft']};"
-                f"color:{t['accent']};border:1px solid {t['accent']};}}"
-            )
-
-    def set_active(self, active: bool) -> None:
-        self._active = active
-        self._apply_theme()
-
-    def _on_toggle(self) -> None:
-        self.toggled.emit(self._plugin.id, not self._active)
-
-
-class WidgetPanel(QtWidgets.QWidget):
-    """Right-edge slide-in panel for widget management.
-
-    Animated via QPropertyAnimation on maximumWidth (0 → PANEL_W, 180 ms).
-    Lives as a child of DesktopLayer so it composites against the gradient.
-    """
-
-    PANEL_W = 320
-
-    def __init__(self, plugins: dict, layout: list[dict],
-                 theme: ThemeManager, on_change,
-                 parent: QtWidgets.QWidget | None = None) -> None:
-        super().__init__(parent)
-        self._plugins  = plugins
-        self._active   = {item["plugin_id"] for item in layout}
-        self._theme    = theme
-        self._on_change = on_change
-        self._cards: dict[str, _PluginCard] = {}
-
-        self.setFixedWidth(self.PANEL_W)
-        self.setAttribute(Qt.WA_StyledBackground, True)
-        self.setObjectName("WidgetPanel")
-
-        self._anim = QtCore.QPropertyAnimation(self, b"maximumWidth")
-        self._anim.setDuration(180)
-        self._anim.setEasingCurve(QtCore.QEasingCurve.InOutCubic)
-
-        self._build()
-        theme.theme_changed.connect(self._apply_panel_theme)
-        self._apply_panel_theme()
-        self.setMaximumWidth(0)
-
-    def _apply_panel_theme(self) -> None:
-        t = self._theme.tokens
-        bg     = t.get("panel_bg", t.get("surface", "#181b22"))
-        accent = t.get("accent", "#5b9bff")
-        self.setStyleSheet(
-            f"QWidget#WidgetPanel{{background:{bg};"
-            f"border-left:2px solid {accent};}}"
-        )
-
-    def _build(self) -> None:
-        lay = QtWidgets.QVBoxLayout(self)
-        lay.setContentsMargins(0, 0, 0, 0)
-        lay.setSpacing(0)
-
-        # Header
-        header = QtWidgets.QWidget()
-        header.setObjectName("WidgetPanelHeader")
-        header.setAttribute(Qt.WA_StyledBackground, True)
-        hl = QtWidgets.QHBoxLayout(header)
-        hl.setContentsMargins(16, 14, 12, 14)
-        t = self._theme.tokens
-        title = QtWidgets.QLabel("Widgets")
-        title.setStyleSheet(
-            f"color:{t['text']};font-size:16px;font-weight:700;background:transparent;")
-        close_btn = QtWidgets.QToolButton()
-        close_btn.setText("✕")
-        close_btn.setCursor(Qt.PointingHandCursor)
-        close_btn.setStyleSheet(
-            f"QToolButton{{color:{t['muted']};border:none;font-size:15px;"
-            f"background:transparent;padding:4px;}}"
-            f"QToolButton:hover{{color:{t['text']};}}"
-        )
-        close_btn.clicked.connect(self.close_panel)
-        hl.addWidget(title, 1)
-        hl.addWidget(close_btn)
-        lay.addWidget(header)
-
-        sep = QtWidgets.QFrame()
-        sep.setFrameShape(QtWidgets.QFrame.HLine)
-        sep.setStyleSheet(f"color:{t.get('border','#2a2e38')};")
-        lay.addWidget(sep)
-
-        scroll = QtWidgets.QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QtWidgets.QFrame.NoFrame)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        scroll.setStyleSheet("background:transparent;")
-
-        content = QtWidgets.QWidget()
-        content.setStyleSheet("background:transparent;")
-        cl = QtWidgets.QVBoxLayout(content)
-        cl.setContentsMargins(10, 10, 10, 10)
-        cl.setSpacing(8)
-
-        for pid, plugin in sorted(self._plugins.items(),
-                                   key=lambda kv: kv[1].name):
-            card = _PluginCard(plugin, pid in self._active, self._theme)
-            card.toggled.connect(self._on_card_toggled)
-            self._cards[pid] = card
-            cl.addWidget(card)
-
-        cl.addStretch(1)
-        scroll.setWidget(content)
-        lay.addWidget(scroll, 1)
-
-    def _on_card_toggled(self, plugin_id: str, add: bool) -> None:
-        if add:
-            self._active.add(plugin_id)
-        else:
-            self._active.discard(plugin_id)
-        for pid, card in self._cards.items():
-            card.set_active(pid in self._active)
-        self._on_change(set(self._active))
-
-    def open_panel(self) -> None:
-        self.show()
-        self.raise_()
-        self._anim.stop()
-        self._anim.setStartValue(self.maximumWidth())
-        self._anim.setEndValue(self.PANEL_W)
-        self._anim.start()
-
-    def close_panel(self) -> None:
-        self._anim.stop()
-        self._anim.setStartValue(self.maximumWidth())
-        self._anim.setEndValue(0)
-        self._anim.start()
-        self._anim.finished.connect(
-            lambda: self.hide() if self.maximumWidth() == 0 else None)
-
-    def is_open(self) -> bool:
-        return self.isVisible() and self.maximumWidth() > 10
-
-    def update_layout(self, layout: list[dict]) -> None:
-        self._active = {item["plugin_id"] for item in layout}
-        for pid, card in self._cards.items():
-            card.set_active(pid in self._active)
-
-
-# ---------------------------------------------------------------------------
-# Desktop layer
-# ---------------------------------------------------------------------------
-
 class DesktopLayer(QtWidgets.QWidget):
-    """Wallpaper-level window hosting the widget grid and slide-in widget panel.
-
-    Background is painted as a diagonal multi-stop gradient with two large radial
-    glow accents and a dot-grid texture — no compositor needed.
-    """
+    """Wallpaper-level window hosting the widget grid + Widget Store."""
 
     def __init__(self, cms_service, theme: ThemeManager) -> None:
         super().__init__()
-        self._cms      = cms_service
-        self._theme    = theme
+        self._cms = cms_service
+        self._theme = theme
         self._username = _username()
         self._apps_by_id = {a.app_id: a for a in list_apps()}
-        self._plugins  = engine.discover_plugins()
-        self._layout   = engine.load_layout()
+        self._plugins = engine.discover_plugins()
+        self._store: WidgetStore | None = None
+
         self.setWindowFlags(Qt.FramelessWindowHint)
         self.setAttribute(Qt.WA_StyledBackground, True)
         self.setObjectName("desktopRoot")
 
-        self._grid_host = QtWidgets.QWidget(self)
-        self._build_grid()
+        self._ctx = WidgetContext(
+            cms=self._cms, run_action=self._run_action,
+            username=self._username, theme=self._theme)
 
-        self._panel = WidgetPanel(
-            self._plugins, self._layout, theme,
-            on_change=self._apply_selection,
-            parent=self,
-        )
-        self._panel.hide()
-
+        self._build_ui()
+        self._grid.capacity_changed.connect(self._on_capacity)
         theme.theme_changed.connect(self._on_theme_changed)
 
     # --- lifecycle --------------------------------------------------------
@@ -297,105 +70,103 @@ class DesktopLayer(QtWidgets.QWidget):
         x11.set_desktop_type(wid)
         self.show()
         x11.set_desktop_type(wid)
-        self._position_panel()
+        self._grid.load(self._make_card, engine.load_layout())
+        self._on_capacity(self._grid.used(), TOTAL_SLOTS)
         if self._cms is not None:
             self._cms.refresh()
+        if os.environ.get("JIOPC_OPEN_STORE"):   # screenshot/verify hook
+            QtCore.QTimer.singleShot(500, self._open_store)
 
-    def resizeEvent(self, e: QtGui.QResizeEvent) -> None:  # noqa: N802
-        self._grid_host.setGeometry(self.rect())
-        self._position_panel()
-        super().resizeEvent(e)
-
-    def _position_panel(self) -> None:
-        self._panel.setGeometry(
-            self.width() - WidgetPanel.PANEL_W, 0, WidgetPanel.PANEL_W, self.height())
-
-    # --- rich gradient background -----------------------------------------
+    # --- background -------------------------------------------------------
     def paintEvent(self, event: QtGui.QPaintEvent) -> None:  # noqa: N802
-        """Paint the multi-layer atmospheric background (see core.background).
-
-        The same painter is used by the dock's overflow strip (offset by the
-        dock's screen position) so floating icons blend into this exact
-        background with no mismatched rectangle.
-        """
         p = QtGui.QPainter(self)
         paint_background(p, self.width(), self.height(), self._theme.tokens)
         p.end()
 
     def _on_theme_changed(self) -> None:
         self.update()
+        self._style_topbar()
 
-    # --- grid -------------------------------------------------------------
-    def _build_grid(self) -> None:
-        """Host the landing dashboard (Component A) full-bleed in the layer.
+    # --- UI ---------------------------------------------------------------
+    def _build_ui(self) -> None:
+        root = QtWidgets.QVBoxLayout(self)
+        root.setContentsMargins(_DOCK_INSET, 22, 26, _PANEL_INSET)
+        root.setSpacing(16)
 
-        The CMS-fed LandingView replaces the old free plugin grid as the desktop
-        content; the widget engine/plugins remain discovered for the Widget
-        Library. Its Customise button opens the widget panel."""
-        old             = self._grid_host
-        self._grid_host = QtWidgets.QWidget(self)
-        self._grid_host.setGeometry(self.rect())
+        bar = QtWidgets.QHBoxLayout()
+        bar.setSpacing(12)
+        self._title = QtWidgets.QLabel("Your desktop")
+        self._title.setObjectName("Greeting")
+        self._badge = QtWidgets.QLabel()
+        self._badge.setObjectName("GreetingSub")
+        bar.addWidget(self._title)
+        bar.addSpacing(8)
+        bar.addWidget(self._badge)
+        bar.addStretch(1)
 
-        lay = QtWidgets.QVBoxLayout(self._grid_host)
-        lay.setContentsMargins(0, 0, 0, 0)
-        ctx = WidgetContext(
-            cms        = self._cms,
-            run_action = self._run_action,
-            username   = self._username,
-            theme      = self._theme,
-        )
-        self._landing = LandingView(ctx)
-        self._landing.customise_requested.connect(
-            lambda: self._panel.open_panel())
-        lay.addWidget(self._landing)
+        self._btn_theme = QtWidgets.QPushButton("◐  Theme")
+        self._btn_theme.setCursor(Qt.PointingHandCursor)
+        self._btn_theme.clicked.connect(self._toggle_theme)
+        self._btn_store = QtWidgets.QPushButton("⊞  Widget Store")
+        self._btn_store.setCursor(Qt.PointingHandCursor)
+        self._btn_store.clicked.connect(self._open_store)
+        bar.addWidget(self._btn_theme)
+        bar.addWidget(self._btn_store)
+        root.addLayout(bar)
 
-        self._grid_host.show()
-        old.deleteLater()
+        self._grid = SnapGrid(self._theme, self)
+        root.addWidget(self._grid, 1)
+        self._style_topbar()
 
-    def _wrap(self, view: QtWidgets.QWidget) -> QtWidgets.QWidget:
-        """Mark the view as a glass card.
+    def _style_topbar(self) -> None:
+        t = self._theme.tokens
+        accent = (f"QPushButton{{background:{t['accent']};color:{t['on_accent']};"
+                  f"border:none;border-radius:18px;padding:8px 18px;"
+                  f"font-size:13px;font-weight:700;}}"
+                  f"QPushButton:hover{{background:{t['accent_soft']};"
+                  f"color:{t['accent']};border:1px solid {t['accent']};}}")
+        ghost = (f"QPushButton{{background:{t['surface_alt']};color:{t['text']};"
+                 f"border:1px solid {t['border']};border-radius:18px;"
+                 f"padding:8px 18px;font-size:13px;font-weight:600;}}"
+                 f"QPushButton:hover{{border-color:{t['accent']};color:{t['accent']};}}")
+        self._btn_store.setStyleSheet(accent)
+        self._btn_theme.setStyleSheet(ghost)
 
-        Depth comes from the QSS recipe (1px translucent edge + top sheen over
-        the darker desktop gradient), not a drop shadow: a software shadow blur
-        is exactly the CPU-only cost the no-compositor design avoids, and it
-        re-blurs on every card repaint. The bright border carries the depth cue
-        instead, consistent with the rest of the shell."""
-        view.setProperty("card", True)
-        view.setAttribute(Qt.WA_StyledBackground, True)
-        return view
+    # --- widget factory ---------------------------------------------------
+    def _make_card(self, plugin_id: str,
+                   size: tuple[int, int]) -> WidgetCard | None:
+        plugin = self._plugins.get(plugin_id)
+        if plugin is None:
+            return None
+        view = plugin.create_view(self._ctx)
+        return WidgetCard(plugin, view, size, self._theme)
 
     def _run_action(self, action: str) -> None:
         engine.execute_action(action, self._apps_by_id)
 
-    # --- widget panel -----------------------------------------------------
+    # --- store ------------------------------------------------------------
+    def _open_store(self) -> None:
+        if self._store is None:
+            self._store = WidgetStore(
+                self._plugins, self._grid, self._theme, self._add_widget)
+        self._store.open_over(
+            QtWidgets.QApplication.primaryScreen().geometry())
+
+    def _add_widget(self, plugin_id: str, size: tuple) -> None:
+        if self._grid.has(plugin_id):
+            return
+        card = self._make_card(plugin_id, tuple(size))
+        if card and self._grid.add(card):
+            self._grid._persist()
+
     def contextMenuEvent(self, e: QtGui.QContextMenuEvent) -> None:  # noqa: N802
         menu = QtWidgets.QMenu(self)
-        if self._panel.is_open():
-            menu.addAction("Close widget editor", self._panel.close_panel)
-        else:
-            menu.addAction("Customise widgets...", self._panel.open_panel)
+        menu.addAction("Open Widget Store...", self._open_store)
+        menu.addAction("Switch light / dark", self._toggle_theme)
         menu.exec_(e.globalPos())
 
-    def _apply_selection(self, selected: set[str]) -> None:
-        """Rebuild the layout from the new selection, using default_layout positions."""
-        # Start from the canonical default positions for known plugins
-        default = {item["plugin_id"]: item
-                   for item in engine.default_layout()}
-        kept: list[dict] = []
-        next_col = 0
-        for pid in sorted(selected):
-            if pid in default:
-                kept.append(dict(default[pid]))
-            else:
-                plugin = self._plugins[pid]
-                pw, ph = plugin.default_size
-                # Auto-place in a new column at row 0
-                kept.append({"plugin_id": pid, "col": next_col,
-                             "row": 0, "w": pw, "h": ph})
-            next_col = max(it["col"] + it["w"] for it in kept)
+    def _toggle_theme(self) -> None:
+        self._theme.set_theme("light" if self._theme.name == "dark" else "dark")
 
-        self._layout = kept
-        engine.save_layout(self._layout)
-        self._panel.update_layout(self._layout)
-        self._build_grid()
-        self._panel.raise_()
+    def _on_capacity(self, used: int, total: int) -> None:
+        self._badge.setText(f"{used} / {total} widgets")

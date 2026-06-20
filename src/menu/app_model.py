@@ -7,6 +7,8 @@ grid paints cheaply.
 """
 from __future__ import annotations
 
+import os
+
 from core.qt_compat import Qt, QtCore, QtGui
 from apps import usage
 from apps.desktop_entries import AppEntry, list_apps
@@ -20,6 +22,21 @@ LAST_TS = Qt.UserRole + 6
 ENTRY = Qt.UserRole + 7
 
 _GENERIC_ICON = "application-x-executable"
+
+
+def _has_real_icon(app: AppEntry) -> bool:
+    """True if the app declares an icon that actually resolves.
+
+    Accepts an absolute icon path that exists, or a named icon the active theme
+    can supply; rejects empty/unresolvable names that would render as the
+    generic placeholder.
+    """
+    name = (app.icon or "").strip()
+    if not name:
+        return False
+    if "/" in name:
+        return os.path.exists(name)
+    return not QtGui.QIcon.fromTheme(name).isNull()
 
 
 def fuzzy_match(query: str, text: str) -> bool:
@@ -46,9 +63,14 @@ class AppListModel(QtCore.QAbstractListModel):
         self.reload()
 
     def reload(self) -> None:
-        """Re-read the catalogue and usage stats (used for live updates)."""
+        """Re-read the catalogue and usage stats (used for live updates).
+
+        Apps whose ``.desktop`` Icon does not resolve to a real icon (so they
+        would fall back to the generic placeholder) are dropped from the drawer:
+        the reference launcher only shows apps with a genuine icon.
+        """
         self.beginResetModel()
-        self._apps = list_apps()
+        self._apps = [a for a in list_apps() if _has_real_icon(a)]
         self._usage = usage.stats()
         self._icon_cache.clear()
         self.endResetModel()

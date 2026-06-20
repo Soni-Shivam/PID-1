@@ -20,6 +20,7 @@ from core.qt_compat import Qt, QtCore, QtGui, QtWidgets
 from core.theme import ThemeManager
 from apps import launcher
 from apps.desktop_entries import AppEntry, app_dirs
+from dock.model import DOCK_MIME
 from menu import recommend
 from menu.app_model import ENTRY, AppFilterProxy, AppListModel
 from settings.dialog import SettingsDialog
@@ -46,9 +47,49 @@ def _icon(app: AppEntry) -> QtGui.QIcon:
     return icon
 
 
-def _tile(app: AppEntry, launch_cb) -> QtWidgets.QToolButton:
+class _AppTile(QtWidgets.QToolButton):
+    """An app tile that launches on click and can be dragged onto the dock.
+
+    A left-drag past a small threshold starts a QDrag carrying the app id in the
+    dock's MIME format; the drag hook hides the menu and reveals the dock so the
+    user can drop to pin. A plain click (no drag) still launches normally.
+    """
+
+    def __init__(self, app_id: str, drag_hook) -> None:
+        super().__init__()
+        self._app_id = app_id
+        self._drag_hook = drag_hook
+        self._press: QtCore.QPoint | None = None
+
+    def mousePressEvent(self, e) -> None:  # noqa: N802
+        if e.button() == Qt.LeftButton:
+            self._press = e.pos()
+        super().mousePressEvent(e)
+
+    def mouseMoveEvent(self, e) -> None:  # noqa: N802
+        if (self._drag_hook and self._press is not None
+                and e.buttons() & Qt.LeftButton
+                and (e.pos() - self._press).manhattanLength() >= 10):
+            self._press = None
+            self._start_drag()
+            return
+        super().mouseMoveEvent(e)
+
+    def _start_drag(self) -> None:
+        mime = QtCore.QMimeData()
+        mime.setData(DOCK_MIME, self._app_id.encode())
+        drag = QtGui.QDrag(self)
+        drag.setMimeData(mime)
+        px = self.icon().pixmap(48, 48)
+        drag.setPixmap(px)
+        drag.setHotSpot(QtCore.QPoint(px.width() // 2, px.height() // 2))
+        self._drag_hook()
+        drag.exec_(Qt.CopyAction)
+
+
+def _tile(app: AppEntry, launch_cb, drag_hook=None) -> QtWidgets.QToolButton:
     """Shared factory: one icon+label tile for strips and the grid."""
-    btn = QtWidgets.QToolButton()
+    btn = _AppTile(app.app_id, drag_hook)
     btn.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
     btn.setIcon(_icon(app))
     btn.setIconSize(QtCore.QSize(ICON, ICON))
@@ -96,9 +137,10 @@ class _TileGrid(QtWidgets.QWidget):
 class MenuWindow(QtWidgets.QWidget):
     """Lazily-built, reusable application launcher with a category sidebar."""
 
-    def __init__(self, theme: ThemeManager) -> None:
+    def __init__(self, theme: ThemeManager, dock=None) -> None:
         super().__init__()
         self._theme = theme
+        self._dock = dock
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
         self.setAttribute(Qt.WA_StyledBackground, True)
         self.setObjectName("MenuRoot")
@@ -262,8 +304,15 @@ class MenuWindow(QtWidgets.QWidget):
         self._rebuild_all_grid()
 
     # --- data filling -----------------------------------------------------
+    def _begin_app_drag(self) -> None:
+        """A tile drag started: hide the menu and reveal the dock to drop onto."""
+        self.hide()
+        if self._dock is not None:
+            self._dock.begin_external_drag()
+
     def _fill_strip(self, grid: _TileGrid, apps: list[AppEntry]) -> None:
-        tiles = [_tile(a, lambda a=a: self._launch(a)) for a in apps]
+        tiles = [_tile(a, lambda a=a: self._launch(a), self._begin_app_drag)
+                 for a in apps]
         grid.set_tiles(tiles)
 
     def _app_at(self, proxy_row: int) -> AppEntry | None:
@@ -273,7 +322,8 @@ class MenuWindow(QtWidgets.QWidget):
     def _rebuild_all_grid(self) -> None:
         apps = [a for row in range(self.proxy.rowCount())
                 if (a := self._app_at(row)) is not None]
-        tiles = [_tile(a, lambda a=a: self._launch(a)) for a in apps]
+        tiles = [_tile(a, lambda a=a: self._launch(a), self._begin_app_drag)
+                 for a in apps]
         self._all_grid.set_tiles(tiles)
 
     def _refresh_strips(self) -> None:

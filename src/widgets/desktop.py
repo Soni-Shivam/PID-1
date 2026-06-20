@@ -22,7 +22,7 @@ from core.theme import ThemeManager
 from apps.desktop_entries import list_apps
 from widgets import engine
 from widgets.engine import WidgetContext
-from widgets.grid import SnapGrid, WidgetCard, TOTAL_SLOTS
+from widgets.grid import SnapGrid, WidgetCard
 from widgets.store import WidgetStore
 
 # Insets so grid content clears the left dock and the bottom LxQt panel.
@@ -59,7 +59,6 @@ class DesktopLayer(QtWidgets.QWidget):
             username=self._username, theme=self._theme)
 
         self._build_ui()
-        self._grid.capacity_changed.connect(self._on_capacity)
         theme.theme_changed.connect(self._on_theme_changed)
 
     # --- lifecycle --------------------------------------------------------
@@ -71,7 +70,6 @@ class DesktopLayer(QtWidgets.QWidget):
         self.show()
         x11.set_desktop_type(wid)
         self._grid.load(self._make_card, engine.load_layout())
-        self._on_capacity(self._grid.used(), TOTAL_SLOTS)
         if self._cms is not None:
             self._cms.refresh()
         if os.environ.get("JIOPC_OPEN_STORE"):   # screenshot/verify hook
@@ -95,13 +93,6 @@ class DesktopLayer(QtWidgets.QWidget):
 
         bar = QtWidgets.QHBoxLayout()
         bar.setSpacing(12)
-        self._title = QtWidgets.QLabel("Your desktop")
-        self._title.setObjectName("Greeting")
-        self._badge = QtWidgets.QLabel()
-        self._badge.setObjectName("GreetingSub")
-        bar.addWidget(self._title)
-        bar.addSpacing(8)
-        bar.addWidget(self._badge)
         bar.addStretch(1)
 
         self._btn_theme = QtWidgets.QPushButton("◐  Theme")
@@ -145,13 +136,13 @@ class DesktopLayer(QtWidgets.QWidget):
         engine.execute_action(action, self._apps_by_id)
 
     # --- store ------------------------------------------------------------
-    def _open_store(self) -> None:
+    def _open_store(self, *_) -> None:
         if self._store is None:
             self._store = WidgetStore(
                 self._plugins, self._grid, self._theme, self._ctx,
                 self._add_widget)
         self._store.open_over(
-            QtWidgets.QApplication.primaryScreen().geometry())
+            QtWidgets.QApplication.primaryScreen().availableGeometry())
 
     def _add_widget(self, plugin_id: str, size: tuple) -> None:
         if self._grid.has(plugin_id):
@@ -159,6 +150,19 @@ class DesktopLayer(QtWidgets.QWidget):
         card = self._make_card(plugin_id, tuple(size))
         if card and self._grid.add(card):
             self._grid._persist()
+            self._animate_in(card)
+
+    def _animate_in(self, card: QtWidgets.QWidget) -> None:
+        """Quick fade-in when a widget is placed on the desktop."""
+        effect = QtWidgets.QGraphicsOpacityEffect(card)
+        card.setGraphicsEffect(effect)
+        anim = QtCore.QPropertyAnimation(effect, b"opacity", self)
+        anim.setDuration(240)
+        anim.setStartValue(0.0)
+        anim.setEndValue(1.0)
+        anim.setEasingCurve(QtCore.QEasingCurve.OutCubic)
+        anim.finished.connect(lambda: card.setGraphicsEffect(None))
+        anim.start(QtCore.QAbstractAnimation.DeleteWhenStopped)
 
     def contextMenuEvent(self, e: QtGui.QContextMenuEvent) -> None:  # noqa: N802
         menu = QtWidgets.QMenu(self)
@@ -166,8 +170,7 @@ class DesktopLayer(QtWidgets.QWidget):
         menu.addAction("Switch light / dark", self._toggle_theme)
         menu.exec_(e.globalPos())
 
-    def _toggle_theme(self) -> None:
+    def _toggle_theme(self, *_) -> None:
+        # *_ absorbs the checked bool that QPushButton.clicked / QAction.triggered
+        # pass, which would otherwise raise and silently break the toggle.
         self._theme.set_theme("light" if self._theme.name == "dark" else "dark")
-
-    def _on_capacity(self, used: int, total: int) -> None:
-        self._badge.setText(f"{used} / {total} widgets")

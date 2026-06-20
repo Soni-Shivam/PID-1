@@ -1,7 +1,8 @@
 """Shared atmospheric background painter (compositor-free).
 
-Paints the multi-layer desktop background — diagonal gradient + two radial
-glow accents + a sparse dot-grid — in SCREEN space translated by (ox, oy).
+Paints the desktop background — an optional wallpaper image, or a multi-layer
+diagonal gradient + two radial glow accents + a sparse dot-grid — in SCREEN
+space translated by (ox, oy).
 
 This lets any window reproduce the exact pixels of the desktop behind it
 without a compositor: DesktopLayer paints it at offset (0, 0); the dock paints
@@ -9,13 +10,48 @@ it offset by its own negative screen position, so its overflow strip (the
 narrow zone where magnified icons poke above the shelf) blends seamlessly into
 the desktop underneath instead of showing a mismatched rectangle.
 
+When the active theme sets a ``wallpaper_image`` token, that photo is drawn
+cover-scaled (decoded once at screen size and cached) under a subtle darkening
+scrim so widget cards stay legible; otherwise the painted gradient is used.
 All colours come from theme tokens; no inline hex literals are authoritative
 (the string defaults are fallbacks only).
 """
 from __future__ import annotations
 
+from pathlib import Path
+
 from core.qt_compat import QtCore, QtGui
 from core.colors import to_qcolor
+
+_ASSETS = Path(__file__).resolve().parent.parent / "assets"
+# Cache the cover-scaled wallpaper keyed by (name, w, h) so repaints are cheap
+# and only one screen-sized pixmap is ever held (RAM budget).
+_WALL_CACHE: dict[tuple, QtGui.QPixmap | None] = {}
+
+
+def _wallpaper(name: str, w: int, h: int) -> QtGui.QPixmap | None:
+    """Decode *name* from src/assets cover-scaled to w x h (cached). None if absent."""
+    if not name or w <= 0 or h <= 0:
+        return None
+    key = (name, w, h)
+    if key in _WALL_CACHE:
+        return _WALL_CACHE[key]
+    path = _ASSETS / name
+    pm: QtGui.QPixmap | None = None
+    if path.exists():
+        reader = QtGui.QImageReader(str(path))
+        sz = reader.size()
+        if sz.isValid() and sz.width() > 0 and sz.height() > 0:
+            # Decode at the smallest size that still covers w x h (centre-crop).
+            scale = max(w / sz.width(), h / sz.height())
+            reader.setScaledSize(QtCore.QSize(max(w, round(sz.width() * scale)),
+                                              max(h, round(sz.height() * scale))))
+        img = reader.read()
+        if not img.isNull():
+            pm = QtGui.QPixmap.fromImage(img)
+    _WALL_CACHE.clear()          # keep at most one cached wallpaper
+    _WALL_CACHE[key] = pm
+    return pm
 
 
 def paint_background(p: QtGui.QPainter, w: int, h: int, tokens: dict,
@@ -28,8 +64,20 @@ def paint_background(p: QtGui.QPainter, w: int, h: int, tokens: dict,
     """
     p.save()
     p.setRenderHint(QtGui.QPainter.Antialiasing)
+    p.setRenderHint(QtGui.QPainter.SmoothPixmapTransform)
     p.translate(ox, oy)
     rect = QtCore.QRect(0, 0, w, h)
+
+    wall = _wallpaper(tokens.get("wallpaper_image", ""), w, h)
+    if wall is not None and not wall.isNull():
+        sx = max(0, (wall.width() - w) // 2)
+        sy = max(0, (wall.height() - h) // 2)
+        p.drawPixmap(rect, wall, QtCore.QRect(sx, sy, w, h))
+        # Gentle darkening scrim so glass cards and text stay readable.
+        scrim = to_qcolor(tokens.get("wallpaper_scrim", "rgba(8,6,16,0.34)"))
+        p.fillRect(rect, scrim)
+        p.restore()
+        return
 
     # Layer 1 — diagonal gradient (four distinct stops)
     c0 = to_qcolor(tokens.get("gradient_top",    "#080c1a"))

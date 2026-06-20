@@ -79,7 +79,7 @@ def main() -> int:
     def toggle_menu() -> None:
         if state["menu"] is None:
             from menu.window import MenuWindow
-            state["menu"] = MenuWindow(theme)
+            state["menu"] = MenuWindow(theme, dock)
         state["menu"].toggle()
 
     dock.menu_requested.connect(toggle_menu)

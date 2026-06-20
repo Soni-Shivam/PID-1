@@ -12,6 +12,10 @@ from apps.desktop_entries import AppEntry, index_by_wm_class, list_apps
 
 _DOCK_JSON = "dock.json"
 
+# Drag-and-drop payload shared by the dock (reorder / pin target) and the app
+# menu (drag a tile onto the dock to pin it). Carries the app id, UTF-8 encoded.
+DOCK_MIME = "application/x-jiopc-dock-app"
+
 # First-run default pins, in order; only those actually installed are kept.
 _DEFAULT_CANDIDATES = (
     "firefox", "firefox-esr", "chromium", "google-chrome",   # browser
@@ -80,6 +84,17 @@ class DockModel:
     # --- catalogue / running ---------------------------------------------
     def app(self, app_id: str) -> AppEntry | None:
         return self._apps.get(app_id)
+
+    def all_apps(self) -> list[AppEntry]:
+        """Every installed app, sorted by name (for the dock-customise picker)."""
+        return sorted(self._apps.values(), key=lambda a: a.name.lower())
+
+    def set_pinned(self, app_id: str, pinned: bool) -> None:
+        """Pin or unpin while preserving the existing order (picker helper)."""
+        if pinned:
+            self.pin(app_id)
+        else:
+            self.unpin(app_id)
 
     def is_pinned(self, app_id: str) -> bool:
         return app_id in self.pins

@@ -198,7 +198,13 @@ class WidgetStore(QtWidgets.QWidget):
 
     # --- build -------------------------------------------------------------
     def _build(self) -> None:
-        root = QtWidgets.QVBoxLayout(self)
+        shell = QtWidgets.QVBoxLayout(self)
+        shell.setContentsMargins(0, 0, 0, 0)
+        self._body = QtWidgets.QWidget()
+        self._body.setStyleSheet("background:transparent;")
+        shell.addWidget(self._body)
+
+        root = QtWidgets.QVBoxLayout(self._body)
         root.setContentsMargins(40, 32, 40, 32)
         root.setSpacing(22)
 
@@ -274,6 +280,30 @@ class WidgetStore(QtWidgets.QWidget):
         self.activateWindow()
         self._relayout()
         self._search.setFocus()
+        self._play_entrance()
+
+    def _play_entrance(self) -> None:
+        """One-shot fade + rise on open (compositor-free, removed on finish)."""
+        effect = QtWidgets.QGraphicsOpacityEffect(self._body)
+        self._body.setGraphicsEffect(effect)
+        home = self._body.pos()
+        fade = QtCore.QPropertyAnimation(effect, b"opacity", self)
+        fade.setDuration(200)
+        fade.setStartValue(0.0)
+        fade.setEndValue(1.0)
+        fade.setEasingCurve(QtCore.QEasingCurve.OutCubic)
+        rise = QtCore.QPropertyAnimation(self._body, b"pos", self)
+        rise.setDuration(240)
+        rise.setStartValue(home + QtCore.QPoint(0, 24))
+        rise.setEndValue(home)
+        rise.setEasingCurve(QtCore.QEasingCurve.OutCubic)
+        group = QtCore.QParallelAnimationGroup(self)
+        group.addAnimation(fade)
+        group.addAnimation(rise)
+        group.finished.connect(lambda: (self._body.setGraphicsEffect(None),
+                                        self._body.move(home)))
+        self._entrance = group
+        group.start(QtCore.QAbstractAnimation.DeleteWhenStopped)
 
     def resizeEvent(self, e) -> None:  # noqa: N802
         self._relayout()

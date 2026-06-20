@@ -104,9 +104,9 @@ def default_layout() -> list[dict]:
     """
     return [
         {"plugin_id": "greeting_clock", "col": 0, "row": 0, "w": 1, "h": 1},
-        {"plugin_id": "quick_tiles", "col": 0, "row": 1, "w": 1, "h": 1},
-        {"plugin_id": "carousel", "col": 1, "row": 0, "w": 1, "h": 2},
-        {"plugin_id": "news", "col": 2, "row": 0, "w": 1, "h": 1},
+        {"plugin_id": "digital_wellbeing", "col": 0, "row": 1, "w": 1, "h": 1},
+        {"plugin_id": "music_player", "col": 1, "row": 0, "w": 2, "h": 1},
+        {"plugin_id": "news", "col": 1, "row": 1, "w": 2, "h": 1},
     ]
 
 

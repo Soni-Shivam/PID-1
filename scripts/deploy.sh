@@ -14,6 +14,10 @@ $SSH "mkdir -p ~/jiopc-home/src ~/jiopc-home/experiments"
 rsync -az --delete -e "ssh -p $PORT" ./src/ "$VM:~/jiopc-home/src/"
 rsync -az --delete -e "ssh -p $PORT" ./experiments/ "$VM:~/jiopc-home/experiments/"
 
+# Ship runtime secrets (gitignored .env: NEWS_API_KEY etc.) so the app can read
+# them via core.secrets. Never committed; lives only on the dev box and the VM.
+[ -f .env ] && scp -P "$PORT" .env "$VM:~/jiopc-home/.env" >/dev/null 2>&1 || true
+
 # Kill any running instance. Match main.py/experiment cmdlines but only kill
 # real python interpreters (comm==python3), never the bash wrapper running this
 # command (which also contains the path) - avoids the pkill self-kill trap.

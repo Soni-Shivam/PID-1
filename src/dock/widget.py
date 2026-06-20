@@ -34,7 +34,7 @@ from core.background import paint_background
 from core.colors import to_qcolor
 from core.theme import ThemeManager
 from apps import launcher
-from dock.model import DockModel
+from dock.model import DockModel, DOCK_MIME
 
 # --- geometry -------------------------------------------------------
 BTN       = 48
@@ -58,6 +58,11 @@ LERP_SPEED = 22.0          # state approach speed (per second)
 EPS_SCALE  = 0.01          # settle thresholds
 EPS_T      = 0.5
 
+# --- autohide --------------------------------------------------------
+PEEK        = 5            # px of the pill left on-screen when hidden (hot edge)
+SLIDE_MS    = 200          # reveal / hide slide duration
+AUTOHIDE_MS = 1400         # delay before the first auto-hide on startup
+
 BTN_MAX   = round(BTN * SCALE_MAX)        # peak box px  (79)
 ICON_MAX  = round(ICON_SIZE * SCALE_MAX)  # peak icon px (56)
 
@@ -69,7 +74,7 @@ _BTN_BASE_X = PAD               # baseline: every button LEFT edge sits here
 
 # --- drag -----------------------------------------------------------
 _DRAG_THRESH = 6
-_MIME        = "application/x-jiopc-dock-app"
+_MIME        = DOCK_MIME
 
 # ────────────────────────────────────────────────────────────────────
 class DockButton(QtWidgets.QToolButton):
@@ -240,6 +245,7 @@ class DockWindow(QtWidgets.QWidget):
             Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool)
         self.setAttribute(Qt.WA_StyledBackground, False)  # we paint manually
         self.setMouseTracking(True)
+        self.setAcceptDrops(True)   # apps dragged from the menu pin here
 
         # ── pill shelf (narrow, fixed-width, lives at window left) ──
         self._pill = QtWidgets.QFrame(self)
@@ -258,6 +264,12 @@ class DockWindow(QtWidgets.QWidget):
         self._frame.setInterval(FRAME_MS)
         self._frame.timeout.connect(self._tick)
 
+        # ── autohide state (slide the dock off the left edge) ──────────
+        self._hidden = False
+        self._revealed_x = 0
+        self._hidden_x = 0
+        self._slide: QtCore.QPropertyAnimation | None = None
+
         self._build()
         self._pill.lower()   # pill renders behind buttons
         theme.theme_changed.connect(self._on_theme_changed)
@@ -267,7 +279,14 @@ class DockWindow(QtWidgets.QWidget):
         x11.set_dock_type(int(self.winId()))
         self.show()
         QtCore.QTimer.singleShot(0, self._apply_dock_geometry)
+        # Reveal at boot so the dock is discoverable, then tuck away so apps get
+        # the full screen; a left-edge touch slides it back (see _reveal/_hide).
+        QtCore.QTimer.singleShot(AUTOHIDE_MS, self._auto_hide_initial)
         self._watcher.start()
+
+    def _auto_hide_initial(self) -> None:
+        if not self._cursor_over_dock():
+            self._hide()
 
     def stop(self) -> None:
         self._frame.stop()
@@ -354,10 +373,26 @@ class DockWindow(QtWidgets.QWidget):
         g._cur_t     = 0.0      # type: ignore[attr-defined]
         g._base_center = 0      # type: ignore[attr-defined]
         g.clicked.connect(self.menu_requested.emit)
+        g.setContextMenuPolicy(Qt.CustomContextMenu)
+        g.customContextMenuRequested.connect(
+            lambda pos: self._grid_menu(g.mapToGlobal(pos)))
         g.dragEnterEvent = lambda e: (  # type: ignore[method-assign]
             e.acceptProposedAction() if e.mimeData().hasFormat(_MIME) else e.ignore())
         g.dropEvent = self._grid_drop  # type: ignore[method-assign]
         return g
+
+    def _grid_menu(self, gpos: QtCore.QPoint) -> None:
+        menu = QtWidgets.QMenu()
+        menu.addAction("Open Applications", self.menu_requested.emit)
+        menu.addSeparator()
+        menu.addAction("Choose dock apps…", self._open_customize)
+        menu.exec_(gpos)
+
+    def _open_customize(self) -> None:
+        from dock.customize import DockCustomizeDialog
+        self._reveal()
+        dlg = DockCustomizeDialog(self.model, self._theme, self._build)
+        dlg.exec_()
 
     def _grid_drop(self, e: QtGui.QDropEvent) -> None:
         if e.mimeData().hasFormat(_MIME):
@@ -370,20 +405,21 @@ class DockWindow(QtWidgets.QWidget):
     def _apply_dock_geometry(self) -> None:
         screen = QtWidgets.QApplication.primaryScreen().geometry()
         h = self.height()
-        x = screen.x() + GAP
+        # Revealed: pill flush to the wall so the cursor stays over it after the
+        # slide (a gap would let it re-hide instantly). Hidden: slide left until
+        # only a PEEK-wide sliver of the pill's right edge remains as a hot edge.
+        self._revealed_x = screen.x()
+        self._hidden_x = screen.x() + PEEK - PILL_W
         y = screen.y() + (screen.height() - h) // 2
+        x = self._hidden_x if self._hidden else self._revealed_x
         self.move(x, y)
         self._mask_key = ()
         self._refresh_pill_and_mask()
         wid = int(self.winId())
         x11.set_dock_type(wid)
-        # Strut reserves only the resting pill band; magnified icons overflow
-        # into non-reserved space to its right.
-        n       = len(self._order)
-        content = n * BTN + (n - 1) * SPACING
-        pill_t  = y + (h - content) // 2 - PAD
-        pill_b  = pill_t + content + 2 * PAD - 1
-        x11.set_left_strut(wid, PILL_W + GAP, pill_t, pill_b)
+        # Autohide: reserve no space so maximized windows use the full width;
+        # the dock floats on top and reveals on demand.
+        x11.set_left_strut(wid, 0, 0, 0)
 
     # ── layout: place buttons by absolute geometry ───────────────────
     def _layout_rest(self) -> None:
@@ -546,9 +582,43 @@ class DockWindow(QtWidgets.QWidget):
         return super().eventFilter(obj, event)
 
     def mouseMoveEvent(self, event: QtGui.QMouseEvent) -> None:  # noqa: N802
+        if self._hidden:
+            self._reveal()
         self._cursor_sy = self.mapToGlobal(event.pos()).y()
         self._wake()
         super().mouseMoveEvent(event)
+
+    def enterEvent(self, event) -> None:  # noqa: N802
+        # Touching the left-edge sliver brings the dock back.
+        if self._hidden:
+            self._reveal()
+        super().enterEvent(event)
+
+    # ── autohide slide ───────────────────────────────────────────────
+    def _reveal(self) -> None:
+        if not self._hidden:
+            return
+        self._hidden = False
+        self._slide_to(self._revealed_x)
+
+    def _hide(self) -> None:
+        if self._hidden or self._cursor_over_dock():
+            return
+        self._hidden = True
+        self._cursor_sy = None
+        self._wake()                 # deflate any magnification as it leaves
+        self._slide_to(self._hidden_x)
+
+    def _slide_to(self, target_x: int) -> None:
+        if self._slide is not None:
+            self._slide.stop()
+        anim = QtCore.QPropertyAnimation(self, b"pos", self)
+        anim.setDuration(SLIDE_MS)
+        anim.setStartValue(self.pos())
+        anim.setEndValue(QtCore.QPoint(target_x, self.y()))
+        anim.setEasingCurve(QtCore.QEasingCurve.OutCubic)
+        anim.start()
+        self._slide = anim
 
     def _cursor_over_dock(self) -> bool:
         """True only if the cursor is over VISIBLE dock content.
@@ -572,15 +642,55 @@ class DockWindow(QtWidgets.QWidget):
         if not self._cursor_over_dock():
             self._cursor_sy = None
             self._wake()
+            self._hide()             # tuck the dock away once the cursor leaves
 
     def leaveEvent(self, event) -> None:  # noqa: N802
         self._check_leave()
         super().leaveEvent(event)
 
+    # ── external drag (an app dragged in from the menu) ──────────────
+    def begin_external_drag(self) -> None:
+        """Reveal the dock and lift it above everything so an app drag can drop.
+
+        Reveal instantly (not animated): a QDrag runs a nested loop that may not
+        tick the slide animation, and the dock must already be on-screen to
+        accept the drop.
+        """
+        self._hidden = False
+        if self._slide is not None:
+            self._slide.stop()
+        self.move(self._revealed_x, self.y())
+        self.raise_()
+
+    def dragEnterEvent(self, e: QtGui.QDragEnterEvent) -> None:  # noqa: N802
+        if e.mimeData().hasFormat(_MIME):
+            if self._hidden:
+                self._reveal()
+            e.acceptProposedAction()
+        else:
+            e.ignore()
+
+    def dragMoveEvent(self, e: QtGui.QDragMoveEvent) -> None:  # noqa: N802
+        if e.mimeData().hasFormat(_MIME):
+            e.acceptProposedAction()
+
+    def dropEvent(self, e: QtGui.QDropEvent) -> None:  # noqa: N802
+        if e.mimeData().hasFormat(_MIME):
+            self._pin(e.mimeData().data(_MIME).data().decode())
+            e.acceptProposedAction()
+
     # ── drag reorder ─────────────────────────────────────────────────
     def _on_drop_reorder(self, src: str, tgt: str) -> None:
         pins = list(self.model.pins)
-        if src not in pins or tgt not in pins: return
+        if src not in pins:
+            # An app dragged in from the menu and dropped onto a dock icon:
+            # pin it just before the icon it landed on.
+            if tgt in pins:
+                pins.insert(pins.index(tgt), src)
+            else:
+                pins.append(src)
+            self.model.reorder(pins); self._build(); return
+        if tgt not in pins: return
         pins.remove(src); pins.insert(pins.index(tgt), src)
         self.model.reorder(pins); self._build()
 
@@ -604,6 +714,8 @@ class DockWindow(QtWidgets.QWidget):
             menu.addAction("Unpin from dock", lambda: self._unpin(app_id))
         else:
             menu.addAction("Pin to dock", lambda: self._pin(app_id))
+        menu.addSeparator()
+        menu.addAction("Choose dock apps…", self._open_customize)
         menu.exec_(gpos)
 
     def _pin(self, a):     self.model.pin(a);     self._build()

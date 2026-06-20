@@ -41,15 +41,23 @@ def _ram_fraction() -> float:
         return 0.0
 
 
-class _Bar(QtWidgets.QWidget):
-    """A rounded progress track painted from a 0..1 fraction in an accent."""
+def _load_color(frac: float) -> str:
+    """Green when comfortable, amber when busy, red when saturated."""
+    if frac < 0.60:
+        return "#22c55e"
+    if frac < 0.85:
+        return "#f59e0b"
+    return "#ef4444"
 
-    def __init__(self, accent_key: str, theme) -> None:
+
+class _Bar(QtWidgets.QWidget):
+    """A rounded progress track painted from a 0..1 fraction, coloured by load."""
+
+    def __init__(self, theme) -> None:
         super().__init__()
         self._frac = 0.0
-        self._accent_key = accent_key
         self._theme = theme
-        self.setFixedHeight(6)
+        self.setFixedHeight(8)
 
     def set_fraction(self, frac: float) -> None:
         self._frac = max(0.0, min(1.0, frac))
@@ -65,10 +73,9 @@ class _Bar(QtWidgets.QWidget):
         p.setPen(Qt.NoPen)
         p.setBrush(track)
         p.drawRoundedRect(0, 0, self.width(), h, h / 2, h / 2)
-        col = to_qcolor(t.get(self._accent_key, t.get("accent", "#5b9bff")))
         w = int(self.width() * self._frac)
         if w > 0:
-            p.setBrush(col)
+            p.setBrush(QtGui.QColor(_load_color(self._frac)))
             p.drawRoundedRect(0, 0, max(h, w), h, h / 2, h / 2)
         p.end()
 
@@ -85,9 +92,7 @@ class _SystemHealth(QtWidgets.QFrame):
         lay.addWidget(self._title)
 
         self._rows: dict[str, tuple[QtWidgets.QLabel, _Bar]] = {}
-        for key, label, accent in (("cpu", "CPU", "indicator"),
-                                   ("ram", "Memory", "accent"),
-                                   ("disk", "Disk", "accent")):
+        for key, label in (("cpu", "CPU"), ("ram", "Memory"), ("disk", "Disk")):
             row = QtWidgets.QHBoxLayout()
             row.setSpacing(8)
             name = QtWidgets.QLabel(label)
@@ -95,7 +100,7 @@ class _SystemHealth(QtWidgets.QFrame):
             pct = QtWidgets.QLabel("—")
             pct.setFixedWidth(42)
             pct.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-            bar = _Bar(accent, ctx.theme)
+            bar = _Bar(ctx.theme)
             col = QtWidgets.QVBoxLayout()
             col.setSpacing(4)
             head = QtWidgets.QHBoxLayout()

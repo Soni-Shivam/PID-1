@@ -44,19 +44,25 @@ class _GreetingClock(QtWidgets.QFrame):
     def _apply_theme(self) -> None:
         t = self._ctx.theme.tokens
         self._clock.setStyleSheet(
-            f"color:{t['text']};font-size:44px;font-weight:800;")
-        self._date.setStyleSheet(f"color:{t['muted']};font-size:13px;")
+            f"color:{t['text']};font-size:54px;font-weight:800;"
+            f"letter-spacing:-2px;background:transparent;")
+        self._date.setStyleSheet(
+            f"color:{t['muted']};font-size:13px;font-weight:600;"
+            f"background:transparent;")
         self._tick()  # greeting carries accent, so refresh on theme change
 
     def _tick(self) -> None:
         t = self._ctx.theme.tokens
         now = time.localtime()
         self._greet.setText(
+            f"<span style='color:{t['accent']};font-weight:800;'>▍ </span>"
             f"<span style='color:{t['muted']};font-size:17px;font-weight:600;'>"
             f"{user.salutation(now.tm_hour)}, </span>"
-            f"<span style='color:{t['accent']};font-size:17px;font-weight:700;'>"
+            f"<span style='color:{t['accent']};font-size:17px;font-weight:800;'>"
             f"{self._username}</span>")
-        self._clock.setText(time.strftime("%I:%M %p", now).lstrip("0"))
+        # Hours non-padded, a thin space before AM/PM for a cleaner clock.
+        self._clock.setText(time.strftime("%I:%M", now).lstrip("0")
+                            + time.strftime(" %p", now).lower())
         self._date.setText(time.strftime("%A, %d %B %Y", now))
 
     def showEvent(self, e) -> None:  # noqa: N802 - pause when not visible

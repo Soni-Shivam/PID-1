@@ -53,20 +53,20 @@ class _QuickTiles(QtWidgets.QFrame):
     def _tile(self, tile: dict) -> QtWidgets.QToolButton:
         t = self._ctx.theme.tokens
         btn = QtWidgets.QToolButton()
-        btn.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
+        btn.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
         icon = QtGui.QIcon.fromTheme(tile.get("icon", ""))
         if not icon.isNull():
             btn.setIcon(icon)
-            btn.setIconSize(QtCore.QSize(22, 22))
+            btn.setIconSize(QtCore.QSize(30, 30))
         btn.setText(tile.get("label", ""))
         btn.setCursor(Qt.PointingHandCursor)
-        btn.setMinimumHeight(52)
+        btn.setMinimumHeight(74)
         btn.setSizePolicy(QtWidgets.QSizePolicy.Expanding,
-                          QtWidgets.QSizePolicy.Fixed)
+                          QtWidgets.QSizePolicy.Expanding)
         btn.setStyleSheet(
-            f"QToolButton{{text-align:left;border:1px solid {t['border']};"
-            f"border-radius:12px;padding:8px 12px;color:{t['text']};"
-            f"background:{t['surface_alt']};font-size:12px;font-weight:600;}}"
+            f"QToolButton{{border:1px solid {t['border']};"
+            f"border-radius:14px;padding:10px 8px;color:{t['text']};"
+            f"background:{t['surface_alt']};font-size:11px;font-weight:600;}}"
             f"QToolButton:hover{{background:{t['accent_soft']};"
             f"border:1px solid {t['accent']};color:{t['accent']};}}")
         action = tile.get("action", "")

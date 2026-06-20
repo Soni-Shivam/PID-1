@@ -7,8 +7,25 @@ from the live theme tokens and restyle on theme_changed (Phase D).
 """
 from __future__ import annotations
 
+import time
+
 from core.qt_compat import Qt, QtCore, QtWidgets
 from widgets.engine import WidgetContext, WidgetPlugin
+
+
+def _ago(ts: float) -> str:
+    """Compact relative time, '' if no/!future timestamp."""
+    try:
+        delta = time.time() - float(ts)
+    except (TypeError, ValueError):
+        return ""
+    if delta < 0:
+        return ""
+    if delta < 3600:
+        return f"{int(delta // 60)}m"
+    if delta < 86400:
+        return f"{int(delta // 3600)}h"
+    return f"{int(delta // 86400)}d"
 
 
 class _NewsRow(QtWidgets.QFrame):
@@ -45,6 +62,14 @@ class _NewsRow(QtWidgets.QFrame):
         text.addWidget(head)
         text.addWidget(src)
         row.addLayout(text, 1)
+
+        ago = _ago(entry.get("ts", 0))
+        if ago:
+            when = QtWidgets.QLabel(ago)
+            when.setAlignment(Qt.AlignRight | Qt.AlignTop)
+            when.setStyleSheet(
+                f"color:{tokens['muted']};font-size:10px;font-weight:600;")
+            row.addWidget(when, 0, Qt.AlignTop)
 
     def mousePressEvent(self, e) -> None:  # noqa: N802
         if e.button() == Qt.LeftButton:

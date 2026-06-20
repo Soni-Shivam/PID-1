@@ -101,6 +101,17 @@ def main() -> int:
     QtCore.QTimer.singleShot(0, _log_first_paint)
     if os.environ.get("JIOPC_OPEN_MENU"):   # screenshot/verify hook
         QtCore.QTimer.singleShot(600, toggle_menu)
+
+    # First-run wizard (Component E): shown only when the flag is absent, and
+    # after the shell has painted so the tour can reference live components.
+    def _maybe_wizard() -> None:
+        from wizard.window import WizardWindow, is_done
+        if is_done() and not os.environ.get("JIOPC_FORCE_WIZARD"):
+            return
+        state["wizard"] = WizardWindow(theme, dock)
+        state["wizard"].show_wizard()
+
+    QtCore.QTimer.singleShot(400, _maybe_wizard)
     return exec_app(app)
 
 

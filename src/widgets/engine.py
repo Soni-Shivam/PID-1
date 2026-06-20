@@ -20,6 +20,25 @@ from apps import launcher
 from apps.desktop_entries import AppEntry
 
 _LAYOUT = "layout.json"
+_SIDEBAR = "sidebar.json"
+
+
+def default_sidebar() -> list[str]:
+    """First-run sidebar widget stack (top to bottom)."""
+    return ["clock", "news", "assistant"]
+
+
+def load_sidebar() -> list[str]:
+    saved = store.read_json(config_file(_SIDEBAR), default=None)
+    if isinstance(saved, list) and all(isinstance(x, str) for x in saved):
+        return saved
+    ids = default_sidebar()
+    save_sidebar(ids)
+    return ids
+
+
+def save_sidebar(ids: list[str]) -> None:
+    store.write_json(config_file(_SIDEBAR), ids)
 
 
 @dataclass
@@ -40,6 +59,8 @@ class WidgetPlugin(ABC):
     icon: str = "application-x-executable"
     default_size: tuple[int, int] = (1, 1)   # (cols, rows) in grid units
     needs_cms: bool = False
+    category: str = "Information"            # Widget Library pill grouping
+    card_chrome: bool = True                 # host wraps view in standard card
 
     @abstractmethod
     def create_view(self, ctx: WidgetContext) -> QtWidgets.QWidget:

@@ -6,7 +6,7 @@
       "id": "c1",
       "title": "Got a doubt? We've got you.",
       "subtitle": "CBSE / JEE / NEET / UPSC - Khan Academy, Testbook and more on your TV",
-      "image_url": "",
+      "image_url": "https://images.unsplash.com/photo-1513542789411-b6a5d4f31634?w=800&q=75",
       "cta_label": "Start learning",
       "cta_action": "url:https://www.khanacademy.org"
     },
@@ -14,7 +14,7 @@
       "id": "c2",
       "title": "Discover JioPC",
       "subtitle": "A full computer on your TV. Browse, create, learn - no laptop needed.",
-      "image_url": "",
+      "image_url": "https://images.unsplash.com/photo-1593642632559-0c6d3fc62b89?w=800&q=75",
       "cta_label": "Take a quick tour",
       "cta_action": "app:lxqt-about.desktop"
     },
@@ -22,7 +22,7 @@
       "id": "c3",
       "title": "Play games on the big screen",
       "subtitle": "Cloud and casual games, no console required.",
-      "image_url": "",
+      "image_url": "https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=800&q=75",
       "cta_label": "Browse games",
       "cta_action": "url:https://www.jio.com/games"
     },
@@ -30,7 +30,7 @@
       "id": "c4",
       "title": "Start your fitness routine",
       "subtitle": "Follow along with guided workouts on a screen everyone can see.",
-      "image_url": "",
+      "image_url": "https://images.unsplash.com/photo-1517836357463-d25dfeac3438?w=800&q=75",
       "cta_label": "Get moving",
       "cta_action": "url:https://www.youtube.com/results?search_query=home+workout"
     },
@@ -38,7 +38,7 @@
       "id": "c5",
       "title": "Manage your money",
       "subtitle": "Track investments and pay bills from the comfort of your couch.",
-      "image_url": "",
+      "image_url": "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=800&q=75",
       "cta_label": "Open finance",
       "cta_action": "url:https://www.jiofinance.com"
     },
@@ -46,7 +46,7 @@
       "id": "c6",
       "title": "Watch, stream, relax",
       "subtitle": "Your favourite shows and movies, one click away.",
-      "image_url": "",
+      "image_url": "https://images.unsplash.com/photo-1522869635100-9f4c5e86aa37?w=800&q=75",
       "cta_label": "Start watching",
       "cta_action": "url:https://www.jiocinema.com"
     }

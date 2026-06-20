@@ -1,23 +1,19 @@
 """The application menu window (Component B).
 
 A frameless launcher sized to the work area (so the dock stays visible beneath
-it). Layout: a fixed header (search + chips + controls) pinned above a single
-QScrollArea that contains everything else in one continuous flow:
+it). Layout follows the reference: a left category sidebar (vertical), a big
+search field on top of the main column, and the app tiles inside a rounded glass
+panel that scrolls — Recently used, Recommended and All apps in one flow.
 
-  Recently used  (tile row)
-  Recommended    (tile row)
-  All apps       (4-column tile grid)
+Search hides the strips and shows only All Apps, and is fuzzy (subsequence). Esc
+or the top-right close button hides it. Built lazily on first open, reused after;
+live-updates via QFileSystemWatcher.
 
-Scrolling the main area scrolls all three sections together — no separate inner
-scroll views. Search hides the strips and shows only the All Apps grid. Esc hides.
-Built lazily on first open, reused after that. Live-updates via QFileSystemWatcher.
-
-Chrome themed by the app-wide stylesheet (#MenuRoot / #Search / [chip] / [tile]
-/ #Section). Tile colours come from tokens, not inline CSS, so light↔dark works.
+Chrome themed by the app-wide stylesheet (#MenuRoot / #MenuSidebar / #MenuPanel /
+#MenuNavItem / #Search / [tile] / #Section). Tile colours come from tokens, not
+inline CSS, so light and dark both work.
 """
 from __future__ import annotations
-
-import math
 
 from core import user
 from core.qt_compat import Qt, QtCore, QtGui, QtWidgets
@@ -36,10 +32,11 @@ _CATEGORIES = [
     ("System", "System"), ("Utility", "Utilities"),
 ]
 ICON = 48
-TILE_W = 100
-TILE_H = 88
-GRID_COLS = 5     # columns in the all-apps grid
-STRIP_N = 8       # max items in recent/recommended rows
+TILE_W = 104
+TILE_H = 92
+GRID_COLS = 6     # columns in the all-apps grid
+STRIP_N = 6       # max items in recent/recommended rows
+SIDEBAR_W = 224
 
 
 def _icon(app: AppEntry) -> QtGui.QIcon:
@@ -72,35 +69,32 @@ class _TileGrid(QtWidgets.QWidget):
 
     def __init__(self, cols: int = GRID_COLS) -> None:
         super().__init__()
+        self.setStyleSheet("background:transparent;")
         self._cols = cols
         self._grid = QtWidgets.QGridLayout(self)
         self._grid.setContentsMargins(0, 0, 0, 0)
-        self._grid.setSpacing(4)
+        self._grid.setSpacing(6)
         for c in range(cols):
             self._grid.setColumnMinimumWidth(c, TILE_W)
 
     def set_tiles(self, tiles: list[QtWidgets.QWidget]) -> None:
-        # Clear
         while self._grid.count():
             item = self._grid.takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
-        # Fill
         for i, t in enumerate(tiles):
             self._grid.addWidget(t, i // self._cols, i % self._cols)
-        # Pad last row so columns are uniform
         remainder = len(tiles) % self._cols
         if remainder:
             for i in range(self._cols - remainder):
                 spacer = QtWidgets.QWidget()
                 spacer.setFixedSize(TILE_W, TILE_H)
-                self._grid.addWidget(spacer,
-                                     len(tiles) // self._cols,
+                self._grid.addWidget(spacer, len(tiles) // self._cols,
                                      remainder + i)
 
 
 class MenuWindow(QtWidgets.QWidget):
-    """Lazily-built, reusable application launcher with a unified scroll."""
+    """Lazily-built, reusable application launcher with a category sidebar."""
 
     def __init__(self, theme: ThemeManager) -> None:
         super().__init__()
@@ -127,8 +121,6 @@ class MenuWindow(QtWidgets.QWidget):
 
     # --- UI construction --------------------------------------------------
     def _build_ui(self) -> None:
-        # A single body widget holds all content so the open animation (opacity
-        # + rise) can target it without affecting the solid MenuRoot backdrop.
         shell = QtWidgets.QVBoxLayout(self)
         shell.setContentsMargins(0, 0, 0, 0)
         self._body = QtWidgets.QWidget()
@@ -136,10 +128,10 @@ class MenuWindow(QtWidgets.QWidget):
         shell.addWidget(self._body)
 
         outer = QtWidgets.QVBoxLayout(self._body)
-        outer.setContentsMargins(56, 30, 56, 0)
-        outer.setSpacing(10)
+        outer.setContentsMargins(40, 28, 40, 28)
+        outer.setSpacing(16)
 
-        # --- Personalised greeting header (with a close button top-right) ---
+        # --- Header: greeting + close ---
         self._greeting = QtWidgets.QLabel()
         self._greeting.setObjectName("Greeting")
         self._greeting_sub = QtWidgets.QLabel("What would you like to open?")
@@ -159,69 +151,80 @@ class MenuWindow(QtWidgets.QWidget):
         close_btn.clicked.connect(self.hide)
         head.addWidget(close_btn, 0, Qt.AlignTop)
         outer.addLayout(head)
-        outer.addSpacing(8)
 
-        # --- Fixed header (search + chips + controls) ---
+        # --- Body: sidebar + main ---
+        body = QtWidgets.QHBoxLayout()
+        body.setSpacing(20)
+
+        sidebar = QtWidgets.QWidget()
+        sidebar.setObjectName("MenuSidebar")
+        sidebar.setAttribute(Qt.WA_StyledBackground, True)
+        sidebar.setFixedWidth(SIDEBAR_W)
+        sb = QtWidgets.QVBoxLayout(sidebar)
+        sb.setContentsMargins(12, 16, 12, 16)
+        sb.setSpacing(4)
+        cats_title = QtWidgets.QLabel("Categories")
+        cats_title.setObjectName("Section")
+        sb.addWidget(cats_title)
+        sb.addSpacing(4)
+        self._cat_col = QtWidgets.QVBoxLayout()
+        self._cat_col.setSpacing(3)
+        sb.addLayout(self._cat_col)
+        sb.addStretch(1)
+        sort_lbl = QtWidgets.QLabel("Sort by")
+        sort_lbl.setObjectName("Section")
+        sb.addWidget(sort_lbl)
+        self.order = QtWidgets.QComboBox()
+        self.order.addItems(["Name", "Most used", "Recently used"])
+        self.order.currentTextChanged.connect(self._on_order)
+        sb.addWidget(self.order)
+        settings_btn = QtWidgets.QPushButton("  Settings")
+        settings_btn.setIcon(QtGui.QIcon.fromTheme("configure"))
+        settings_btn.setCursor(Qt.PointingHandCursor)
+        settings_btn.clicked.connect(self._open_settings)
+        sb.addWidget(settings_btn)
+        body.addWidget(sidebar)
+
+        # main column: search + scrollable glass panel of tiles
+        main = QtWidgets.QVBoxLayout()
+        main.setSpacing(14)
         self.search = QtWidgets.QLineEdit()
         self.search.setPlaceholderText("Search apps")
         self.search.setClearButtonEnabled(True)
         self.search.setObjectName("Search")
         self.search.textChanged.connect(self._on_search)
         self.search.returnPressed.connect(self._launch_first)
-        outer.addWidget(self.search)
+        main.addWidget(self.search)
 
-        controls = QtWidgets.QHBoxLayout()
-        self.chips_row = QtWidgets.QHBoxLayout()
-        self.chips_row.setSpacing(8)
-        chip_host = QtWidgets.QWidget()
-        chip_host.setLayout(self.chips_row)
-        controls.addWidget(chip_host, 1)
-        self.order = QtWidgets.QComboBox()
-        self.order.addItems(["Name", "Most used", "Recently used"])
-        self.order.currentTextChanged.connect(self._on_order)
-        controls.addWidget(QtWidgets.QLabel("Sort:"))
-        controls.addWidget(self.order)
-        settings_btn = QtWidgets.QPushButton("Settings")
-        settings_btn.setIcon(QtGui.QIcon.fromTheme("configure"))
-        settings_btn.setCursor(Qt.PointingHandCursor)
-        settings_btn.clicked.connect(self._open_settings)
-        controls.addWidget(settings_btn)
-        outer.addLayout(controls)
-
-        # --- Single scrollable content area ---
         self._scroll = QtWidgets.QScrollArea()
         self._scroll.setWidgetResizable(True)
         self._scroll.setFrameShape(QtWidgets.QFrame.NoFrame)
         self._scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self._scroll.setStyleSheet("background:transparent;")
-
         self._content = QtWidgets.QWidget()
-        self._content.setStyleSheet("background:transparent;")
+        self._content.setObjectName("MenuPanel")
+        self._content.setAttribute(Qt.WA_StyledBackground, True)
         self._content_lay = QtWidgets.QVBoxLayout(self._content)
-        self._content_lay.setContentsMargins(0, 8, 0, 24)
-        self._content_lay.setSpacing(6)
+        self._content_lay.setContentsMargins(22, 20, 22, 26)
+        self._content_lay.setSpacing(8)
 
-        # Recent section
         self._recent_label = self._section_label("Recently used")
         self._recent_grid = _TileGrid(cols=STRIP_N)
         self._content_lay.addWidget(self._recent_label)
         self._content_lay.addWidget(self._recent_grid)
-
-        # Recommended section
         self._reco_label = self._section_label("Recommended")
         self._reco_grid = _TileGrid(cols=STRIP_N)
         self._content_lay.addWidget(self._reco_label)
         self._content_lay.addWidget(self._reco_grid)
-
-        # All apps section
         self._all_label = self._section_label("All apps")
         self._all_grid = _TileGrid(cols=GRID_COLS)
         self._content_lay.addWidget(self._all_label)
         self._content_lay.addWidget(self._all_grid)
         self._content_lay.addStretch(1)
-
         self._scroll.setWidget(self._content)
-        outer.addWidget(self._scroll, 1)
+        main.addWidget(self._scroll, 1)
+        body.addLayout(main, 1)
+        outer.addLayout(body, 1)
 
     def _section_label(self, text: str) -> QtWidgets.QLabel:
         lbl = QtWidgets.QLabel(text)
@@ -229,8 +232,9 @@ class MenuWindow(QtWidgets.QWidget):
         return lbl
 
     def _build_chips(self) -> None:
-        while self.chips_row.count():
-            item = self.chips_row.takeAt(0)
+        """(Re)build the vertical category list in the sidebar."""
+        while self._cat_col.count():
+            item = self._cat_col.takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
         self._chip_group = QtWidgets.QButtonGroup(self)
@@ -238,21 +242,20 @@ class MenuWindow(QtWidgets.QWidget):
         present = set()
         for app in self.model._apps:  # noqa: SLF001
             present.update(app.categories)
-        self._add_chip("All", "", checked=True)
+        self._add_chip("All apps", "", checked=True)
         for cat, label in _CATEGORIES:
             if cat in present:
                 self._add_chip(label, cat)
-        self.chips_row.addStretch(1)
 
     def _add_chip(self, label: str, category: str, checked: bool = False) -> None:
         chip = QtWidgets.QPushButton(label)
         chip.setCheckable(True)
         chip.setChecked(checked)
         chip.setCursor(Qt.PointingHandCursor)
-        chip.setProperty("chip", True)
+        chip.setObjectName("MenuNavItem")
         chip.clicked.connect(lambda: self._on_chip(category))
         self._chip_group.addButton(chip)
-        self.chips_row.addWidget(chip)
+        self._cat_col.addWidget(chip)
 
     def _on_chip(self, category: str) -> None:
         self.proxy.set_category(category)
@@ -264,18 +267,10 @@ class MenuWindow(QtWidgets.QWidget):
         grid.set_tiles(tiles)
 
     def _app_at(self, proxy_row: int) -> AppEntry | None:
-        """Resolve a proxy row to its AppEntry via the source model.
-
-        The custom ENTRY role must be read from the (pure-Python) source model,
-        not the proxy: QSortFilterProxyModel.data() routes through C++ QVariant,
-        which cannot round-trip an arbitrary Python object and hands back a bare
-        ``True`` instead of the AppEntry (which then breaks launching).
-        """
         src = self.proxy.mapToSource(self.proxy.index(proxy_row, 0))
         return self.model.data(src, ENTRY) if src.isValid() else None
 
     def _rebuild_all_grid(self) -> None:
-        """Rebuild the All Apps grid from the current proxy model state."""
         apps = [a for row in range(self.proxy.rowCount())
                 if (a := self._app_at(row)) is not None]
         tiles = [_tile(a, lambda a=a: self._launch(a)) for a in apps]
@@ -296,6 +291,7 @@ class MenuWindow(QtWidgets.QWidget):
         self.proxy.set_query(text)
         searching = bool(text.strip())
         self._set_sections_visible(not searching)
+        self._all_label.setText("Results" if searching else "All apps")
         self._rebuild_all_grid()
 
     def _on_order(self, label: str) -> None:
@@ -320,9 +316,8 @@ class MenuWindow(QtWidgets.QWidget):
         self._greeting.setText(f"{user.salutation()}, {user.first_name()}")
 
     def _play_entrance(self) -> None:
-        """One-shot fade + rise on open. Compositor-free (Qt software-composites
-        the QGraphicsOpacityEffect itself) and removed on finish, so it adds no
-        idle cost — it runs only on this user interaction, under 250 ms."""
+        """One-shot fade + rise on open (compositor-free, < 250 ms, removed on
+        finish so it adds no idle cost)."""
         effect = QtWidgets.QGraphicsOpacityEffect(self._body)
         self._body.setGraphicsEffect(effect)
         home = self._body.pos()
@@ -348,7 +343,7 @@ class MenuWindow(QtWidgets.QWidget):
             self._body.move(home)
 
         group.finished.connect(_settle)
-        self._entrance = group   # keep a reference alive for the run
+        self._entrance = group
         group.start(QtCore.QAbstractAnimation.DeleteWhenStopped)
 
     # --- live updates -----------------------------------------------------
@@ -371,10 +366,10 @@ class MenuWindow(QtWidgets.QWidget):
         self.proxy.set_query("")
         self.proxy.set_category("")
         self._set_sections_visible(True)
+        self._all_label.setText("All apps")
         self._refresh_greeting()
         self._refresh_strips()
         self._rebuild_all_grid()
-        # Reset scroll to top
         self._scroll.verticalScrollBar().setValue(0)
         self.show()
         self.raise_()

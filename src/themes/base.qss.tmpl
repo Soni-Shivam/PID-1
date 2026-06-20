@@ -42,6 +42,20 @@ QToolButton#MenuClose {
     border-radius: 20px; font-size: 15px; font-weight: 700;
 }
 QToolButton#MenuClose:hover { background: rgba(220,38,38,0.85); color: #ffffff; border: 1px solid rgba(220,38,38,0.85); }
+#MenuSidebar {
+    background: $card_bg; border: 1px solid $glass_border; border-radius: 18px;
+}
+#MenuPanel {
+    background: $card_bg; border: 1px solid $glass_border; border-radius: 18px;
+}
+QPushButton#MenuNavItem {
+    background: transparent; color: $muted; border: none; border-radius: 12px;
+    padding: 9px 14px; font-size: 13px; font-weight: 600; text-align: left;
+}
+QPushButton#MenuNavItem:hover { background: $hover; color: $text; }
+QPushButton#MenuNavItem:checked {
+    background: $accent; color: $on_accent; font-weight: 700;
+}
 #Greeting {
     color: $text; font-size: 28px; font-weight: 800; background: transparent;
     padding-left: 2px;

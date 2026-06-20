@@ -68,6 +68,12 @@ def _ago(ts: float) -> str:
     return f"{int(delta // 86400)}d"
 
 
+# Keep a strong reference to in-flight workers so they are not garbage-collected
+# (and thus destroyed) while their thread is still running, which aborts Qt. Each
+# worker is unparented and removes itself here when it finishes.
+_LIVE_WORKERS: set["_NewsWorker"] = set()
+
+
 class _NewsWorker(QtCore.QThread):
     done = QtCore.pyqtSignal(list)
     failed = QtCore.pyqtSignal(str)
@@ -173,6 +179,15 @@ class _News(QtWidgets.QFrame):
 
         self._apply_theme()
         ctx.theme.theme_changed.connect(self._apply_theme)
+        app = QtWidgets.QApplication.instance()
+        if app is not None:
+            app.aboutToQuit.connect(self._drain)
+
+    def _drain(self) -> None:
+        """Block briefly for an in-flight fetch on quit so the thread isn't
+        destroyed mid-run (which aborts Qt)."""
+        if self._worker is not None and self._worker.isRunning():
+            self._worker.wait(3000)
 
     def _apply_theme(self) -> None:
         t = self._ctx.theme.tokens
@@ -196,17 +211,26 @@ class _News(QtWidgets.QFrame):
             self._items_lay.addWidget(row)
 
     def _refresh(self) -> None:
-        if not self._key:
+        # Skip when not genuinely on-screen (e.g. the Widget Store's off-screen
+        # live-preview grab) so we never spawn a throwaway fetch thread.
+        if not self._key or not self.isVisible():
             return
         if self._worker is not None and self._worker.isRunning():
             return
         if time.time() - self._last_fetch < _REFRESH_AFTER and self._items:
             return
         self._last_fetch = time.time()
-        self._worker = _NewsWorker(self._key, self)
-        self._worker.done.connect(self._on_done)
-        self._worker.failed.connect(self._on_failed)
-        self._worker.start()
+        # Unparented + tracked in _LIVE_WORKERS, self-removing on finish: the
+        # thread is never destroyed while running (which would abort Qt), even if
+        # this view is deleted mid-fetch.
+        worker = _NewsWorker(self._key)
+        self._worker = worker
+        worker.done.connect(self._on_done)
+        worker.failed.connect(self._on_failed)
+        worker.finished.connect(lambda: _LIVE_WORKERS.discard(worker))
+        worker.finished.connect(worker.deleteLater)
+        _LIVE_WORKERS.add(worker)
+        worker.start()
 
     def _on_done(self, items: list) -> None:
         self._items = items

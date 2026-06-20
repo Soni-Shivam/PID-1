@@ -2,6 +2,7 @@
   "name": "light",
   "bg": "#eef1f5",
   "wallpaper": "#e8ecf5",
+  "wallpaper_image": "",
   "gradient_top": "#dde3f0",
   "gradient_mid": "#d4dbe9",
   "gradient_bottom": "#ccd4e6",

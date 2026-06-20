@@ -1,5 +1,7 @@
 __pycache__/
 *.pyc
+.env
+.env.*
 *.xwd
 *.deb
 nohup.out

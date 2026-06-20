@@ -37,43 +37,55 @@ def _accent_for(plugin) -> str:
     return _CAT_ACCENT.get(getattr(plugin, "category", ""), "#5b9bff")
 
 
-class _Swatch(QtWidgets.QWidget):
-    """Painted preview: an accent gradient with the plugin's themed icon."""
+def _rounded(pm: QtGui.QPixmap, w: int, h: int, r: int = 12) -> QtGui.QPixmap:
+    """Cover-fit *pm* into w x h with rounded corners."""
+    scaled = pm.scaled(w, h, Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
+    x = max(0, (scaled.width() - w) // 2)
+    y = max(0, (scaled.height() - h) // 2)
+    cropped = scaled.copy(x, y, w, h)
+    out = QtGui.QPixmap(w, h)
+    out.fill(Qt.transparent)
+    p = QtGui.QPainter(out)
+    p.setRenderHint(QtGui.QPainter.Antialiasing)
+    path = QtGui.QPainterPath()
+    path.addRoundedRect(QtCore.QRectF(0, 0, w, h), r, r)
+    p.setClipPath(path)
+    p.drawPixmap(0, 0, cropped)
+    p.end()
+    return out
 
-    def __init__(self, plugin) -> None:
-        super().__init__()
-        self._accent = _accent_for(plugin)
-        self._pm = QtGui.QIcon.fromTheme(plugin.icon).pixmap(56, 56)
-        if self._pm.isNull():
-            self._pm = QtGui.QIcon.fromTheme(
-                "application-x-executable").pixmap(56, 56)
-        self.setFixedHeight(_PREV_H)
 
-    def paintEvent(self, _e) -> None:  # noqa: N802
-        p = QtGui.QPainter(self)
-        p.setRenderHint(QtGui.QPainter.Antialiasing)
-        p.setRenderHint(QtGui.QPainter.SmoothPixmapTransform)
-        rect = self.rect()
-        a = QtGui.QColor(self._accent)
-        dark = QtGui.QColor(max(0, a.red() - 70), max(0, a.green() - 70),
-                            max(0, a.blue() - 70))
-        grad = QtGui.QLinearGradient(0, 0, rect.width(), rect.height())
-        grad.setColorAt(0, dark)
-        grad.setColorAt(1, a)
-        path = QtGui.QPainterPath()
-        path.addRoundedRect(QtCore.QRectF(rect.adjusted(0, 0, -1, -1)), 14, 14)
-        p.fillPath(path, grad)
-        if not self._pm.isNull():
-            x = (rect.width() - self._pm.width()) // 2
-            y = (rect.height() - self._pm.height()) // 2
-            p.drawPixmap(x, y, self._pm)
-        p.end()
+def _live_preview(plugin, ctx, w: int, h: int) -> QtGui.QPixmap | None:
+    """Render the plugin's real view to a pixmap once (no lingering timers).
+
+    A QShowEvent is delivered so widgets that populate on show (system health,
+    clocks) fill in before the grab; the temporary view is then discarded, which
+    tears down any timer it started — so the store costs nothing while idle.
+    """
+    try:
+        view = plugin.create_view(ctx)
+        frame = QtWidgets.QFrame()
+        frame.setProperty("card", True)
+        frame.setAttribute(Qt.WA_StyledBackground, True)
+        frame.setAttribute(Qt.WA_DontShowOnScreen, True)
+        lay = QtWidgets.QVBoxLayout(frame)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.addWidget(view)
+        frame.resize(w, h)
+        frame.ensurePolished()
+        frame.layout().activate()
+        QtWidgets.QApplication.sendEvent(view, QtGui.QShowEvent())
+        pm = frame.grab()
+        frame.deleteLater()
+        return pm if not pm.isNull() else None
+    except Exception:  # a misbehaving plugin must not break the store
+        return None
 
 
 class _PreviewCard(QtWidgets.QFrame):
     add_clicked = QtCore.pyqtSignal(str, tuple)   # (plugin_id, size)
 
-    def __init__(self, plugin, theme) -> None:
+    def __init__(self, plugin, ctx, theme) -> None:
         super().__init__()
         self._plugin = plugin
         self._theme = theme
@@ -86,7 +98,18 @@ class _PreviewCard(QtWidgets.QFrame):
         root = QtWidgets.QVBoxLayout(self)
         root.setContentsMargins(12, 12, 12, 12)
         root.setSpacing(8)
-        root.addWidget(_Swatch(plugin))
+        pw = _CARD_W - 24
+        preview = QtWidgets.QLabel()
+        preview.setFixedHeight(_PREV_H)
+        preview.setAlignment(Qt.AlignCenter)
+        preview.setStyleSheet("background:transparent;")
+        pm = _live_preview(plugin, ctx, pw, _PREV_H)
+        if pm is not None:
+            preview.setPixmap(_rounded(pm, pw, _PREV_H))
+        else:
+            icon = QtGui.QIcon.fromTheme(plugin.icon).pixmap(56, 56)
+            preview.setPixmap(icon)
+        root.addWidget(preview)
 
         self._name = QtWidgets.QLabel(plugin.name)
         self._desc = QtWidgets.QLabel(plugin.description or "")
@@ -146,12 +169,13 @@ class _PreviewCard(QtWidgets.QFrame):
 class WidgetStore(QtWidgets.QWidget):
     """On-top overlay listing plugins; adds to the grid on demand."""
 
-    def __init__(self, plugins: dict, grid, theme,
+    def __init__(self, plugins: dict, grid, theme, ctx,
                  on_add: Callable[[str, tuple], None]) -> None:
         super().__init__()
         self._plugins = plugins
         self._grid = grid
         self._theme = theme
+        self._ctx = ctx
         self._on_add = on_add
         self._cards: dict[str, _PreviewCard] = {}
         self._filter_cat: str | None = None
@@ -234,7 +258,7 @@ class WidgetStore(QtWidgets.QWidget):
         self._grid_lay.setAlignment(Qt.AlignTop | Qt.AlignLeft)
         for pid, plugin in sorted(self._plugins.items(),
                                   key=lambda kv: kv[1].name):
-            card = _PreviewCard(plugin, self._theme)
+            card = _PreviewCard(plugin, self._ctx, self._theme)
             card.add_clicked.connect(self._add)
             self._cards[pid] = card
         scroll.setWidget(container)

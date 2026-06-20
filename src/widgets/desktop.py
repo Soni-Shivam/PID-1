@@ -148,7 +148,8 @@ class DesktopLayer(QtWidgets.QWidget):
     def _open_store(self) -> None:
         if self._store is None:
             self._store = WidgetStore(
-                self._plugins, self._grid, self._theme, self._add_widget)
+                self._plugins, self._grid, self._theme, self._ctx,
+                self._add_widget)
         self._store.open_over(
             QtWidgets.QApplication.primaryScreen().geometry())
 

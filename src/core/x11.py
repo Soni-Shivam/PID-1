@@ -83,6 +83,24 @@ def set_bottom_strut(win_id: int, reserve: int, x0: int, x1: int) -> None:
     d.sync()
 
 
+def set_left_strut(win_id: int, reserve: int, y0: int, y1: int) -> None:
+    """Reserve ``reserve`` px at the screen left across [y0, y1].
+
+    Coordinates are screen-relative (use the full screen geometry, not the
+    available geometry). Sets both _NET_WM_STRUT (legacy, 4 values) and
+    _NET_WM_STRUT_PARTIAL (12 values) for broad WM compatibility. The PARTIAL
+    field order is left, right, top, bottom, then the start/end ranges; for a
+    left dock only the left reserve and its [y0, y1] vertical span are set.
+    """
+    d = _get_display()
+    w = d.create_resource_object("window", win_id)
+    w.change_property(_atom(d, "_NET_WM_STRUT"), Xatom.CARDINAL, 32,
+                      [reserve, 0, 0, 0])
+    w.change_property(_atom(d, "_NET_WM_STRUT_PARTIAL"), Xatom.CARDINAL, 32,
+                      [reserve, 0, 0, 0, y0, y1, 0, 0, 0, 0, 0, 0])
+    d.sync()
+
+
 def activate_window(win_id: int) -> None:
     """Raise and focus a window (incl. un-minimize) via _NET_ACTIVE_WINDOW."""
     d = _get_display()

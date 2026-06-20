@@ -1,26 +1,27 @@
-"""Dock widget — macOS-style magnifying dock.
+"""Dock widget — macOS-style magnifying dock, anchored to the LEFT edge.
 
 Magnification model (target state -> rendered state -> dt interpolation):
 
-  Every button has a RESTING centre (`_base_center`) inside a fixed-width
-  window.  Each animation frame computes a mathematical TARGET (scale +
-  horizontal translation) from the cursor's 1-D X distance, then moves the
-  RENDERED state toward it with time-delta interpolation for a fluid feel.
+  Every button has a RESTING centre (`_base_center`) along the dock's main axis
+  (vertical, Y) inside a fixed-WIDTH window.  Each animation frame computes a
+  mathematical TARGET (scale + translation along Y) from the cursor's 1-D Y
+  distance, then moves the RENDERED state toward it with time-delta
+  interpolation for a fluid feel.
 
-    1. proximity      p = 1 - dx/THRESHOLD          (dx = |cursor_x - center_x|)
+    1. proximity      p = 1 - dy/THRESHOLD          (dy = |cursor_y - center_y|)
     2. quad ease-out  raw = SCALE_MAX * p*(2-p)
     3. clamp          target_scale = max(1.0, raw)
     4. spread         magnified icons push neighbours apart (no overlap)
     5. compensation   counter-translate so the hot icon stays under the cursor
     6. interpolate    cur += (target - cur) * (LERP_SPEED * dt)
 
-  Buttons are placed by absolute `setGeometry`; the box BOTTOM always sits on
-  `_BTN_BASE_Y` (bottom-centre pivot) so icons magnify upward from a flat
-  baseline and never leave the floor.  The frame timer runs only while the
-  dock is animating and stops the instant it settles, so idle CPU stays ~0%.
+  Buttons are placed by absolute `setGeometry`; the box LEFT edge always sits on
+  `_BTN_BASE_X` (left-edge pivot) so icons magnify rightward from a flat wall
+  and never leave the screen edge.  The frame timer runs only while the dock is
+  animating and stops the instant it settles, so idle CPU stays ~0%.
 
-  The window is masked each frame to: pill rounded-rect  ∪  per-button
-  overflow rects above the pill — so the X11 desktop shows between floating
+  The window is masked each frame to: pill rounded-rect  ∪  per-button overflow
+  rects to the RIGHT of the pill — so the X11 desktop shows between floating
   icons with no compositor.
 """
 from __future__ import annotations
@@ -50,22 +51,21 @@ MAGNIFY_FACTOR  = 0.65                   # peak extra scale
 SCALE_MAX       = 1.0 + MAGNIFY_FACTOR   # icon-under-cursor multiplier (1.65)
 SPREAD_FACTOR   = 0.5                    # how far neighbours part
 THRESHOLD       = (BTN + 10) * 2.5       # 1-D activation radius px (= 145)
-SPREAD_HEADROOM = 4 * BTN                # spare window width for the spread
+SPREAD_HEADROOM = 4 * BTN                # spare window height for the spread
 
 FRAME_MS   = 16            # ~60 fps animation tick
 LERP_SPEED = 22.0          # state approach speed (per second)
 EPS_SCALE  = 0.01          # settle thresholds
-EPS_TX     = 0.5
+EPS_T      = 0.5
 
 BTN_MAX   = round(BTN * SCALE_MAX)        # peak box px  (79)
 ICON_MAX  = round(ICON_SIZE * SCALE_MAX)  # peak icon px (56)
 
-# --- two-layer heights ----------------------------------------------
-PILL_H = BTN + 2 * PAD          # 72 px — the shelf (background bar)
-WIN_H  = BTN_MAX + 2 * PAD      # window height (room for magnified boxes)
+# --- two-layer widths -----------------------------------------------
+PILL_W = BTN + 2 * PAD          # 72 px — the shelf (background bar)
+WIN_W  = BTN_MAX + 2 * PAD      # window width (room for magnified boxes)
 
-_PILL_TOP   = WIN_H - PILL_H    # top of the pill within the window
-_BTN_BASE_Y = WIN_H - PAD       # baseline: every button BOTTOM sits here
+_BTN_BASE_X = PAD               # baseline: every button LEFT edge sits here
 
 # --- drag -----------------------------------------------------------
 _DRAG_THRESH = 6
@@ -75,10 +75,11 @@ _MIME        = "application/x-jiopc-dock-app"
 class DockButton(QtWidgets.QToolButton):
     """Dock icon.
 
-    Holds its own rendered magnification state (`_cur_scale`, `_cur_tx`) and
-    resting centre (`_base_center`); the DockWindow animator writes these and
-    repositions the button by absolute geometry.  The icon is painted pinned
-    to the box BOTTOM so its base stays level with the dock floor at any scale.
+    Holds its own rendered magnification state (`_cur_scale`, `_cur_t`) and
+    resting centre (`_base_center`, along Y); the DockWindow animator writes
+    these and repositions the button by absolute geometry.  The icon is painted
+    pinned to the box LEFT so its base stays level with the dock wall at any
+    scale.
     """
 
     activated    = QtCore.pyqtSignal(str)
@@ -94,9 +95,9 @@ class DockButton(QtWidgets.QToolButton):
         self._running = False
         self._drag_start: QtCore.QPoint | None = None
 
-        # rendered (interpolated) magnification state + resting centre-x
+        # rendered (interpolated) magnification state + resting centre (Y)
         self._cur_scale   = 1.0
-        self._cur_tx      = 0.0
+        self._cur_t       = 0.0
         self._base_center = 0
 
         # High-res base pixmap rendered once; every frame scales DOWN from
@@ -113,8 +114,7 @@ class DockButton(QtWidgets.QToolButton):
         self.setContextMenuPolicy(Qt.CustomContextMenu)
         self.setAcceptDrops(True)
         # We paint EVERY pixel of the box ourselves (background + icon), so the
-        # widget is fully opaque — no reliance on see-through, which is what
-        # left a square box poking above the shelf.
+        # widget is fully opaque — no reliance on see-through.
         self.setAttribute(Qt.WA_OpaquePaintEvent, True)
 
         self.clicked.connect(lambda: self.activated.emit(self.app_id))
@@ -128,35 +128,36 @@ class DockButton(QtWidgets.QToolButton):
             self.update()
 
     def paintEvent(self, event: QtGui.QPaintEvent) -> None:  # noqa: N802
-        """Paint the box background, then the icon anchored bottom-centre.
+        """Paint the box background, then the icon anchored left-centre.
 
-        The box straddles two zones: above the shelf line it reproduces the
-        EXACT desktop background (screen-aligned), below it fills the pill
-        colour.  So a magnified box poking above the shelf is pixel-identical
-        to the desktop behind it — no square shows — while the icon itself,
-        pinned by its own bottom edge, stays grounded as it magnifies upward.
+        The box straddles two zones: left of the shelf line it fills the pill
+        colour, right of it (the overflow zone) it reproduces the EXACT desktop
+        background (screen-aligned). So a magnified box poking past the shelf is
+        pixel-identical to the desktop behind it — no square shows — while the
+        icon itself, pinned by its own left edge, stays grounded as it magnifies
+        rightward.
         """
         p = QtGui.QPainter(self)
         p.setRenderHint(QtGui.QPainter.SmoothPixmapTransform)
         p.setRenderHint(QtGui.QPainter.Antialiasing)
 
         t        = self._theme.tokens
-        boundary = max(0, min(self.height(), _PILL_TOP - self.y()))  # shelf line
+        boundary = max(0, min(self.width(), PILL_W - self.x()))  # shelf line (x)
 
-        # below the shelf line: pill colour (seamless with the pill shelf).
+        # left of the shelf line: pill colour (seamless with the pill shelf).
         # to_qcolor is mandatory: dock_bg is an rgba() token and bare QColor()
-        # would render it as opaque BLACK (the "black box per icon"). Force full
-        # opacity so the WA_OpaquePaintEvent box leaves no backing-store gaps.
-        if boundary < self.height():
+        # would render it as opaque BLACK. Force full opacity so the
+        # WA_OpaquePaintEvent box leaves no backing-store gaps.
+        if boundary > 0:
             col = to_qcolor(t.get("dock_bg") or t.get("surface", "#181b22"))
             col.setAlpha(255)
-            p.fillRect(0, boundary, self.width(), self.height() - boundary, col)
-        # above the shelf line: the desktop's own background, screen-aligned
-        if boundary > 0:
+            p.fillRect(0, 0, boundary, self.height(), col)
+        # right of the shelf line: the desktop's own background, screen-aligned
+        if boundary < self.width():
             gpos = self.mapToGlobal(QtCore.QPoint(0, 0))
             sc   = QtWidgets.QApplication.primaryScreen().geometry()
             p.save()
-            p.setClipRect(0, 0, self.width(), boundary)
+            p.setClipRect(boundary, 0, self.width() - boundary, self.height())
             paint_background(p, sc.width(), sc.height(), t, -gpos.x(), -gpos.y())
             p.restore()
 
@@ -164,16 +165,15 @@ class DockButton(QtWidgets.QToolButton):
         pm      = self._base_pm.scaled(
             target, target, Qt.KeepAspectRatio, Qt.SmoothTransformation)
         dot_res = (DOT_HALO // 2 + 6) if self._running else 4
-        icon_x  = (self.width()  - pm.width())  // 2
-        icon_y  = self.height() - pm.height() - dot_res   # pin ACTUAL bottom
-        p.drawPixmap(icon_x, max(0, icon_y), pm)
+        icon_x  = dot_res                            # pin ACTUAL left edge
+        icon_y  = (self.height() - pm.height()) // 2
+        p.drawPixmap(max(0, icon_x), max(0, icon_y), pm)
 
         if self._running:
-            t      = self._theme.tokens
             accent = to_qcolor(t.get("indicator", "#5b9bff"))
             halo   = QtGui.QColor(accent); halo.setAlpha(55)
-            cx = self.width() // 2
-            cy = self.height() - DOT_HALO // 2 - 3
+            cx = DOT_HALO // 2 + 1
+            cy = self.height() // 2
             p.setBrush(halo); p.setPen(Qt.NoPen)
             p.drawEllipse(cx - DOT_HALO//2, cy - DOT_HALO//2, DOT_HALO, DOT_HALO)
             p.setBrush(accent)
@@ -217,7 +217,7 @@ class DockButton(QtWidgets.QToolButton):
 
 # ────────────────────────────────────────────────────────────────────
 class DockWindow(QtWidgets.QWidget):
-    """Bottom dock with macOS-style magnification.
+    """Left-edge dock with macOS-style magnification.
 
     Fixed-width window; buttons are positioned by absolute geometry each
     animation frame (no layout reflow → no jitter).  See module docstring
@@ -241,22 +241,18 @@ class DockWindow(QtWidgets.QWidget):
         self.setAttribute(Qt.WA_StyledBackground, False)  # we paint manually
         self.setMouseTracking(True)
 
-        # ── pill shelf (narrow, fixed-height, lives at window bottom) ──
+        # ── pill shelf (narrow, fixed-width, lives at window left) ──
         self._pill = QtWidgets.QFrame(self)
         self._pill.setObjectName("DockRoot")
         self._pill.setAttribute(Qt.WA_StyledBackground, True)
-        self._pill.setFixedHeight(PILL_H)
-        # No QGraphicsDropShadowEffect: the tight window mask clips any outer
-        # shadow, so its only visible pixels were a dark halo bleeding up into
-        # the overflow zone behind the floating icons (and it re-rendered the
-        # pill to a pixmap every animation frame). Removed on both counts.
+        self._pill.setFixedWidth(PILL_W)
 
         self._watcher = x11.ClientListWatcher()
         self._watcher.window_added.connect(self._on_window_added)
         self._watcher.window_removed.connect(self._on_window_removed)
 
         # ── animation state (target vs rendered, dt-interpolated) ──────
-        self._cursor_sx: float | None = None   # cursor screen-x, None = away
+        self._cursor_sy: float | None = None   # cursor screen-y, None = away
         self._last_t: float | None = None
         self._frame = QtCore.QTimer(self)
         self._frame.setInterval(FRAME_MS)
@@ -287,7 +283,7 @@ class DockWindow(QtWidgets.QWidget):
 
     # ── gradient in overflow zone only ───────────────────────────────
     def paintEvent(self, event: QtGui.QPaintEvent) -> None:  # noqa: N802
-        """Paint the EXACT desktop background in the overflow zone (above pill).
+        """Paint the EXACT desktop background in the overflow zone (right of pill).
 
         By reproducing the desktop's own multi-layer background — offset by the
         dock's screen position and clipped to the overflow strip — the patch
@@ -295,7 +291,7 @@ class DockWindow(QtWidgets.QWidget):
         so no rectangle shows.  The pill zone paints itself (child widget).
         """
         p  = QtGui.QPainter(self)
-        p.setClipRect(0, 0, self.width(), _PILL_TOP)   # overflow strip only
+        p.setClipRect(PILL_W, 0, self.width() - PILL_W, self.height())
         sc = QtWidgets.QApplication.primaryScreen().geometry()
         paint_background(p, sc.width(), sc.height(), self._theme.tokens,
                          -self.x(), -self.y())
@@ -336,8 +332,8 @@ class DockWindow(QtWidgets.QWidget):
 
         n       = len(self._order)
         content = n * BTN + (n - 1) * SPACING
-        win_w   = content + 2 * PAD + SPREAD_HEADROOM
-        self.setFixedSize(win_w, WIN_H)
+        win_h   = content + 2 * PAD + SPREAD_HEADROOM
+        self.setFixedSize(WIN_W, win_h)
 
         self._layout_rest()
         self._mask_key = ()
@@ -355,7 +351,7 @@ class DockWindow(QtWidgets.QWidget):
         g.setToolTip("Applications")
         g.setAcceptDrops(True)
         g._cur_scale = 1.0      # type: ignore[attr-defined]  (does not magnify)
-        g._cur_tx    = 0.0      # type: ignore[attr-defined]
+        g._cur_t     = 0.0      # type: ignore[attr-defined]
         g._base_center = 0      # type: ignore[attr-defined]
         g.clicked.connect(self.menu_requested.emit)
         g.dragEnterEvent = lambda e: (  # type: ignore[method-assign]
@@ -373,43 +369,43 @@ class DockWindow(QtWidgets.QWidget):
     # ── geometry ─────────────────────────────────────────────────────
     def _apply_dock_geometry(self) -> None:
         screen = QtWidgets.QApplication.primaryScreen().geometry()
-        w = self.width()
-        x = screen.x() + (screen.width() - w) // 2
-        y = screen.y() + screen.height() - WIN_H - GAP
+        h = self.height()
+        x = screen.x() + GAP
+        y = screen.y() + (screen.height() - h) // 2
         self.move(x, y)
         self._mask_key = ()
         self._refresh_pill_and_mask()
         wid = int(self.winId())
         x11.set_dock_type(wid)
         # Strut reserves only the resting pill band; magnified icons overflow
-        # into non-reserved space above it.
+        # into non-reserved space to its right.
         n       = len(self._order)
         content = n * BTN + (n - 1) * SPACING
-        pill_l  = x + (w - content) // 2 - PAD
-        pill_r  = pill_l + content + 2 * PAD - 1
-        x11.set_bottom_strut(wid, PILL_H + GAP, pill_l, pill_r)
+        pill_t  = y + (h - content) // 2 - PAD
+        pill_b  = pill_t + content + 2 * PAD - 1
+        x11.set_left_strut(wid, PILL_W + GAP, pill_t, pill_b)
 
     # ── layout: place buttons by absolute geometry ───────────────────
     def _layout_rest(self) -> None:
-        """Compute resting centres and snap every button to scale 1.0."""
+        """Compute resting centres (Y) and snap every button to scale 1.0."""
         n       = len(self._order)
         content = n * BTN + (n - 1) * SPACING
-        x       = (self.width() - content) // 2
+        y       = (self.height() - content) // 2
         for b in self._order:
-            b._base_center = x + BTN // 2   # type: ignore[attr-defined]
-            b._cur_scale   = 1.0            # type: ignore[attr-defined]
-            b._cur_tx      = 0.0            # type: ignore[attr-defined]
-            x += BTN + SPACING
+            b._base_center = y + BTN // 2    # type: ignore[attr-defined]
+            b._cur_scale   = 1.0             # type: ignore[attr-defined]
+            b._cur_t       = 0.0             # type: ignore[attr-defined]
+            y += BTN + SPACING
         self._apply_layout()
 
     def _apply_layout(self) -> None:
-        """Position every button from its rendered (cur) state, bottom-pinned."""
-        baseline = _BTN_BASE_Y
+        """Position every button from its rendered (cur) state, left-pinned."""
+        baseline = _BTN_BASE_X
         for b in self._order:
             s    = getattr(b, "_cur_scale", 1.0)
             size = max(8, round(BTN * s))
-            cx   = round(b._base_center + getattr(b, "_cur_tx", 0.0))  # type: ignore[attr-defined]
-            b.setGeometry(cx - size // 2, baseline - size, size, size)
+            cy   = round(b._base_center + getattr(b, "_cur_t", 0.0))  # type: ignore[attr-defined]
+            b.setGeometry(baseline, cy - size // 2, size, size)
             if isinstance(b, DockButton):
                 icon_px = max(6, round(ICON_SIZE * s))
                 b.setIconSize(QtCore.QSize(icon_px, icon_px))
@@ -420,7 +416,7 @@ class DockWindow(QtWidgets.QWidget):
     def _refresh_pill_and_mask(self) -> None:
         """Position the pill to span the icons and rebuild the window mask.
 
-        mask = rounded pill rect ∪ {overflow rect of each button above pill}
+        mask = rounded pill rect ∪ {overflow rect of each button right of pill}
         Between-icon areas in the overflow zone fall outside the mask → the
         desktop X11 layer shows through (no compositor needed).
         """
@@ -429,46 +425,46 @@ class DockWindow(QtWidgets.QWidget):
             return
         geos = [b.geometry() for b in order]
 
-        left   = max(0, min(g.left() for g in geos) - PAD)
-        right  = min(self.width() - 1, max(g.right() for g in geos) + PAD)
-        pill_w = max(1, right - left + 1)
+        top    = max(0, min(g.top() for g in geos) - PAD)
+        bottom = min(self.height() - 1, max(g.bottom() for g in geos) + PAD)
+        pill_h = max(1, bottom - top + 1)
 
-        self._pill.setGeometry(left, _PILL_TOP, pill_w, PILL_H)
+        self._pill.setGeometry(0, top, PILL_W, pill_h)
         pill_path = QtGui.QPainterPath()
-        pill_path.addRoundedRect(QtCore.QRectF(0, 0, pill_w, PILL_H), RADIUS, RADIUS)
+        pill_path.addRoundedRect(QtCore.QRectF(0, 0, PILL_W, pill_h), RADIUS, RADIUS)
         self._pill.setMask(QtGui.QRegion(pill_path.toFillPolygon().toPolygon()))
 
-        key = (left, pill_w, tuple(
-            (g.left(), g.top(), g.width(), getattr(b, "_running", False))
+        key = (top, pill_h, tuple(
+            (g.top(), g.left(), g.height(), getattr(b, "_running", False))
             for b, g in zip(order, geos)))
         if key == self._mask_key:
             return
         self._mask_key = key
 
         outer = QtGui.QPainterPath()
-        outer.addRoundedRect(QtCore.QRectF(left, _PILL_TOP, pill_w, PILL_H),
+        outer.addRoundedRect(QtCore.QRectF(0, top, PILL_W, pill_h),
                              RADIUS, RADIUS)
         region = QtGui.QRegion(outer.toFillPolygon().toPolygon())
-        # Above the shelf, cut the mask TIGHTLY to the scaled icon — not the
+        # Right of the shelf, cut the mask TIGHTLY to the scaled icon — not the
         # full layout box. The box is ~BTN*s wide but the icon is only
-        # ~ICON_SIZE*s, so masking the box exposed a wide strip of painted
-        # fake-background on each side that read as a hard rectangle. Hugging
-        # the icon excludes that strip, so the genuine X11 desktop (and any
-        # window behind the dock) shows there instead.
+        # ~ICON_SIZE*s, so masking the box would expose a strip of painted
+        # fake-background that reads as a hard rectangle. Hugging the icon
+        # excludes that strip, so the genuine X11 desktop shows there instead.
         PAD_AA = 2   # spare px so the icon's antialiased edge is not clipped
         for b, g in zip(order, geos):
-            if g.top() >= _PILL_TOP:
+            s        = getattr(b, "_cur_scale", 1.0)
+            icon_px  = max(6, round(ICON_SIZE * s))
+            dot_res  = (DOT_HALO // 2 + 6) if getattr(b, "_running", False) else 4
+            icon_x   = g.left() + dot_res
+            icon_y   = g.top()  + (g.height() - icon_px) // 2
+            icon_r   = icon_x + icon_px
+            if icon_r <= PILL_W:
                 continue
-            s       = getattr(b, "_cur_scale", 1.0)
-            icon_px = max(6, round(ICON_SIZE * s))
-            dot_res = (DOT_HALO // 2 + 6) if getattr(b, "_running", False) else 4
-            icon_x  = g.left() + (g.width() - icon_px) // 2
-            icon_y  = g.top()  + g.height() - icon_px - dot_res
-            top     = max(g.top(), icon_y - PAD_AA)
-            h       = _PILL_TOP - top
-            if h > 0:
+            left = max(PILL_W, icon_x) - PAD_AA
+            w    = icon_r - left + PAD_AA
+            if w > 0:
                 region = region.united(QtGui.QRegion(
-                    icon_x - PAD_AA, top, icon_px + 2 * PAD_AA, h))
+                    left, icon_y - PAD_AA, w, icon_px + 2 * PAD_AA))
         self.setMask(region)
 
     # ── animation driver ─────────────────────────────────────────────
@@ -478,41 +474,41 @@ class DockWindow(QtWidgets.QWidget):
             self._frame.start()
 
     def _compute_targets(self) -> list[tuple[float, float]]:
-        """Mathematical target (scale, tx) per button from the cursor X."""
+        """Mathematical target (scale, t) per button from the cursor Y."""
         order   = self._order
         n       = len(order)
-        cur     = self._cursor_sx
-        dock_sx = self.x()
+        cur     = self._cursor_sy
+        dock_sy = self.y()
 
         scales: list[float] = []
         for b in order:
             if cur is None or b is self._grid_btn:
                 scales.append(1.0); continue
-            dx = abs(dock_sx + b._base_center - cur)   # type: ignore[attr-defined]
-            if dx >= THRESHOLD:
+            dy = abs(dock_sy + b._base_center - cur)   # type: ignore[attr-defined]
+            if dy >= THRESHOLD:
                 scales.append(1.0)
             else:
-                p   = 1.0 - dx / THRESHOLD
+                p   = 1.0 - dy / THRESHOLD
                 raw = SCALE_MAX * (p * (2.0 - p))      # quadratic ease-out
                 scales.append(max(1.0, raw))
 
-        # spread: each magnified icon pushes neighbours outward
-        tx = [0.0] * n
+        # spread: each magnified icon pushes neighbours outward (along Y)
+        t = [0.0] * n
         for i, s in enumerate(scales):
             if s > 1.1:
                 off = 1.25 * (s - 1.0) * BTN * SPREAD_FACTOR * 0.5
-                for j in range(i):       tx[j] -= off
-                for j in range(i + 1, n): tx[j] += off
+                for j in range(i):       t[j] -= off
+                for j in range(i + 1, n): t[j] += off
 
         # centering compensation: keep the hot icon under the cursor
         if cur is not None and n:
             ni = max(range(n), key=lambda k: scales[k])
             if scales[ni] > 1.0:
-                adjust = tx[ni] / 2.0
+                adjust = t[ni] / 2.0
                 for k in range(n):
-                    tx[k] -= adjust
+                    t[k] -= adjust
 
-        return list(zip(scales, tx))
+        return list(zip(scales, t))
 
     def _tick(self) -> None:
         now = time.perf_counter()
@@ -524,16 +520,16 @@ class DockWindow(QtWidgets.QWidget):
         settled = True
         for b, (ts, tt) in zip(self._order, targets):
             b._cur_scale += (ts - b._cur_scale) * a   # type: ignore[attr-defined]
-            b._cur_tx    += (tt - b._cur_tx) * a      # type: ignore[attr-defined]
+            b._cur_t     += (tt - b._cur_t) * a       # type: ignore[attr-defined]
             if (abs(ts - b._cur_scale) > EPS_SCALE     # type: ignore[attr-defined]
-                    or abs(tt - b._cur_tx) > EPS_TX):  # type: ignore[attr-defined]
+                    or abs(tt - b._cur_t) > EPS_T):    # type: ignore[attr-defined]
                 settled = False
 
         self._apply_layout()
 
         if settled:                          # snap exactly and stop → 0% idle
             for b, (ts, tt) in zip(self._order, targets):
-                b._cur_scale, b._cur_tx = ts, tt   # type: ignore[attr-defined]
+                b._cur_scale, b._cur_t = ts, tt   # type: ignore[attr-defined]
             self._apply_layout()
             self._frame.stop()
             self._last_t = None
@@ -543,22 +539,22 @@ class DockWindow(QtWidgets.QWidget):
                     event: QtCore.QEvent) -> bool:
         t = event.type()
         if t == QtCore.QEvent.MouseMove:
-            self._cursor_sx = obj.mapToGlobal(event.pos()).x()  # type: ignore[attr-defined]
+            self._cursor_sy = obj.mapToGlobal(event.pos()).y()  # type: ignore[attr-defined]
             self._wake()
         elif t == QtCore.QEvent.Leave:
             QtCore.QTimer.singleShot(0, self._check_leave)
         return super().eventFilter(obj, event)
 
     def mouseMoveEvent(self, event: QtGui.QMouseEvent) -> None:  # noqa: N802
-        self._cursor_sx = self.mapToGlobal(event.pos()).x()
+        self._cursor_sy = self.mapToGlobal(event.pos()).y()
         self._wake()
         super().mouseMoveEvent(event)
 
     def _cursor_over_dock(self) -> bool:
         """True only if the cursor is over VISIBLE dock content.
 
-        The window is far wider than the visible dock (it carries spread
-        headroom on both sides), so testing ``self.rect()`` would report the
+        The window is far taller than the visible dock (it carries spread
+        headroom on both ends), so testing ``self.rect()`` would report the
         cursor as 'inside' while it sits in the invisible margin and the dock
         would never deflate.  Test the pill and the buttons instead.
         """
@@ -574,7 +570,7 @@ class DockWindow(QtWidgets.QWidget):
 
     def _check_leave(self) -> None:
         if not self._cursor_over_dock():
-            self._cursor_sx = None
+            self._cursor_sy = None
             self._wake()
 
     def leaveEvent(self, event) -> None:  # noqa: N802
@@ -603,8 +599,8 @@ class DockWindow(QtWidgets.QWidget):
             menu.addAction("Open new window", lambda: launcher.launch(app))
             menu.addSeparator()
         if self.model.is_pinned(app_id):
-            menu.addAction("Move left",       lambda: self._move(app_id, -1))
-            menu.addAction("Move right",      lambda: self._move(app_id, +1))
+            menu.addAction("Move up",         lambda: self._move(app_id, -1))
+            menu.addAction("Move down",       lambda: self._move(app_id, +1))
             menu.addAction("Unpin from dock", lambda: self._unpin(app_id))
         else:
             menu.addAction("Pin to dock", lambda: self._pin(app_id))

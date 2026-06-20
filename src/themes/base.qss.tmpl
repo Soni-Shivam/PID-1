@@ -17,8 +17,7 @@
 
 /* --- dock ------------------------------------------------------------- */
 #DockRoot {
-    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-        stop:0 $glass_sheen, stop:0.08 $dock_bg, stop:1 $dock_bg);
+    background: $dock_bg;
     border: 1px solid $dock_border;
     border-radius: 18px;
 }
@@ -38,6 +37,11 @@ QToolButton#DockGrid:hover { background: $accent; color: $on_accent; }
         stop:0 $surface, stop:0.55 $bg, stop:1 $bg);
 }
 #MenuBody { background: transparent; }
+QToolButton#MenuClose {
+    background: $surface_alt; color: $muted; border: 1px solid $glass_border;
+    border-radius: 20px; font-size: 15px; font-weight: 700;
+}
+QToolButton#MenuClose:hover { background: rgba(220,38,38,0.85); color: #ffffff; border: 1px solid rgba(220,38,38,0.85); }
 #Greeting {
     color: $text; font-size: 28px; font-weight: 800; background: transparent;
     padding-left: 2px;

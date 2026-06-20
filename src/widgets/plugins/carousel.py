@@ -1,29 +1,20 @@
-"""Hero carousel widget (CMS-fed, with RAM-safe hero images).
+"""Hero carousel widget (CMS-fed) with a full-bleed background image.
 
-Cycles through featured cards (image, title, subtitle, call-to-action).
-Auto-advances every 8 s but only while visible (the timer stops on hide)
-to respect the idle CPU budget. Prev/next arrows and page dots for manual
-control.
+The featured image fills the ENTIRE widget (scaled to cover, centre-cropped,
+rounded corners); the eyebrow / title / subtitle / CTA / arrows / page dots sit
+on top, over a bottom-up dark scrim that keeps them legible on any photo. Cycles
+every 8 s while visible (timer paused on hide); the text block cross-fades and
+the image swaps at the opacity trough.
 
-Card-to-card transitions cross-fade the hero image + text block via a single
-QGraphicsOpacityEffect on the entire content stack: the new card is set while
-opacity is at the trough so there is no flicker. Effect is software-composited
-by Qt (no X compositor needed). Each transition's animations are parented +
-DeleteWhenStopped so nothing accumulates across advances.
-
-Image pipeline (RAM budget compliance):
-  - QNetworkAccessManager downloads asynchronously; bytes go straight to disk
-    at ~/.cache/jiopc/home/images/ and the QByteArray is released.
-  - QImageReader with setScaledSize() pre-scales the image to the label
-    dimensions BEFORE allocation, so only the rendered pixels ever live in RAM.
-  - In-session QPixmap cache prevents redundant decodes.
-  - Rounded corners are applied via QSS border-radius on the image container.
-
-Colours come from theme tokens (Phase D).
+Images are bundled local assets (src/widgets/assets/, referenced by the feed's
+"image" field) so nothing is fetched at paint time; a remote "image_url" is used
+as a fallback via ImageCache. Pixmaps are size-capped and cached for the RAM
+budget. Text is light over the scrim in both themes; accents come from tokens.
 """
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 
 from core.qt_compat import Qt, QtCore, QtGui, QtWidgets
 from widgets.engine import WidgetContext, WidgetPlugin
@@ -34,108 +25,33 @@ log = logging.getLogger("jiopc.carousel")
 _INTERVAL_MS = 8000
 _FADE_OUT_MS = 130
 _FADE_IN_MS = 210
-_IMAGE_H = 160       # target height (px) for hero image — proportional to widget
-_RADIUS = 18         # border-radius for image container and card background
+_RADIUS = 18
+_CAP = 1100   # px — max dimension a bundled hero is decoded at (RAM budget)
+
+_ASSETS = Path(__file__).resolve().parent.parent / "assets"
+_PIX_CACHE: dict[str, QtGui.QPixmap] = {}
 
 
-class _HeroImage(QtWidgets.QLabel):
-    """A QLabel that holds a scaled, rounded hero image.
-
-    The image is fetched once and cached by ImageCache.  While loading (or if
-    no URL is provided) the widget shows a gradient placeholder so the layout
-    does not jump.
-    """
-
-    def __init__(self, cache: ImageCache, parent: QtWidgets.QWidget | None = None) -> None:
-        super().__init__(parent)
-        self._cache = cache
-        self._current_url: str = ""
-        self._pixmap_full: QtGui.QPixmap | None = None
-
-        self.setMinimumHeight(_IMAGE_H)
-        self.setMaximumHeight(_IMAGE_H)
-        self.setSizePolicy(
-            QtWidgets.QSizePolicy.Expanding,
-            QtWidgets.QSizePolicy.Fixed,
-        )
-        self.setAlignment(Qt.AlignCenter)
-        self.setObjectName("heroImageLabel")
-        # Rounded clip via QSS — no compositor, purely software-painted.
-        self.setStyleSheet(
-            f"#heroImageLabel{{border-radius:{_RADIUS}px;"
-            "background:transparent;}"
-        )
-
-    def load_url(self, url: str) -> None:
-        """Request the pixmap for *url*.  Re-uses cache for same URL."""
-        if url == self._current_url:
-            return
-        self._current_url = url
-        self._pixmap_full = None
-        self._show_placeholder()
-        if not url:
-            return
-        size = QtCore.QSize(self.width() or 400, _IMAGE_H)
-        self._cache.fetch(url, size, self._on_pixmap)
-
-    def _on_pixmap(self, _url: str, pixmap: QtGui.QPixmap) -> None:
-        """Called (main thread) when ImageCache has a scaled QPixmap ready."""
-        self._pixmap_full = pixmap
-        self._apply_pixmap()
-
-    def _apply_pixmap(self) -> None:
-        if self._pixmap_full is None:
-            return
-        # Crop to fill (centre-crop to our exact label size).
-        w, h = self.width(), self.height()
-        if w <= 0 or h <= 0:
-            return
-        scaled = self._pixmap_full.scaled(
-            w, h, Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation
-        )
-        # Centre-crop
-        x = max(0, (scaled.width() - w) // 2)
-        y = max(0, (scaled.height() - h) // 2)
-        cropped = scaled.copy(x, y, w, h)
-
-        # Round corners by painting through a rounded clip path.
-        rounded = QtGui.QPixmap(cropped.size())
-        rounded.fill(Qt.transparent)
-        painter = QtGui.QPainter(rounded)
-        painter.setRenderHint(QtGui.QPainter.Antialiasing)
-        path = QtGui.QPainterPath()
-        path.addRoundedRect(
-            QtCore.QRectF(0, 0, cropped.width(), cropped.height()),
-            _RADIUS, _RADIUS,
-        )
-        painter.setClipPath(path)
-        painter.drawPixmap(0, 0, cropped)
-        painter.end()
-
-        self.setPixmap(rounded)
-
-    def resizeEvent(self, event: QtGui.QResizeEvent) -> None:  # noqa: N802
-        super().resizeEvent(event)
-        # Re-apply existing pixmap at new size so layout changes look correct.
-        if self._pixmap_full is not None:
-            self._apply_pixmap()
-
-    def _show_placeholder(self) -> None:
-        """Draw a subtle gradient rect so space is reserved while loading."""
-        w = self.width() or 400
-        h = _IMAGE_H
-        pm = QtGui.QPixmap(w, h)
-        pm.fill(Qt.transparent)
-        painter = QtGui.QPainter(pm)
-        painter.setRenderHint(QtGui.QPainter.Antialiasing)
-        grad = QtGui.QLinearGradient(0, 0, w, h)
-        grad.setColorAt(0, QtGui.QColor(80, 80, 120, 120))
-        grad.setColorAt(1, QtGui.QColor(30, 30, 60, 120))
-        path = QtGui.QPainterPath()
-        path.addRoundedRect(QtCore.QRectF(0, 0, w, h), _RADIUS, _RADIUS)
-        painter.fillPath(path, grad)
-        painter.end()
-        self.setPixmap(pm)
+def _load_local(name: str) -> QtGui.QPixmap | None:
+    """Decode a bundled hero image (size-capped, cached). None if missing."""
+    if not name:
+        return None
+    if name in _PIX_CACHE:
+        return _PIX_CACHE[name]
+    path = _ASSETS / name
+    if not path.exists():
+        return None
+    reader = QtGui.QImageReader(str(path))
+    sz = reader.size()
+    if sz.isValid() and max(sz.width(), sz.height()) > _CAP:
+        scale = _CAP / max(sz.width(), sz.height())
+        reader.setScaledSize(QtCore.QSize(int(sz.width() * scale),
+                                          int(sz.height() * scale)))
+    img = reader.read()
+    pm = QtGui.QPixmap.fromImage(img) if not img.isNull() else None
+    if pm is not None:
+        _PIX_CACHE[name] = pm
+    return pm
 
 
 class _Carousel(QtWidgets.QFrame):
@@ -143,25 +59,23 @@ class _Carousel(QtWidgets.QFrame):
         super().__init__()
         self._ctx = ctx
         self._cards: list[dict] = []
+        self._index = 0
+        self._pixmap: QtGui.QPixmap | None = None
+        self._pending_url = ""
         self._cache = ImageCache(self)
         self.setObjectName("carouselRoot")
-        self.setAttribute(Qt.WA_StyledBackground, True)
+        self.setAttribute(Qt.WA_StyledBackground, False)
 
         root = QtWidgets.QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
+        root.addStretch(1)
 
-        # ── Hero image ──────────────────────────────────────────────────────
-        self._hero_image = _HeroImage(self._cache, self)
-        root.addWidget(self._hero_image)
-
-        # ── Text + controls block (opacity-faded as a unit) ─────────────────
         self._content = QtWidgets.QWidget()
         self._content.setAttribute(Qt.WA_StyledBackground, False)
         cl = QtWidgets.QVBoxLayout(self._content)
-        cl.setContentsMargins(20, 14, 20, 14)
+        cl.setContentsMargins(22, 16, 22, 18)
         cl.setSpacing(6)
-
         self._eyebrow = QtWidgets.QLabel("FEATURED")
         self._title = QtWidgets.QLabel()
         self._title.setWordWrap(True)
@@ -177,32 +91,24 @@ class _Carousel(QtWidgets.QFrame):
         self._cta.clicked.connect(self._activate_cta)
         bottom.addWidget(self._cta, 0, Qt.AlignLeft)
         bottom.addStretch(1)
-
-        self._nav = QtWidgets.QHBoxLayout()
         self._nav_btns: list[QtWidgets.QToolButton] = []
         for sym, step in (("‹", -1), ("›", +1)):
             b = QtWidgets.QToolButton()
             b.setText(sym)
             b.setCursor(Qt.PointingHandCursor)
             b.clicked.connect(lambda _=False, s=step: self._advance(s))
-            self._nav.addWidget(b)
+            bottom.addWidget(b)
             self._nav_btns.append(b)
-        bottom.addLayout(self._nav)
         cl.addLayout(bottom)
-
         self._dots = QtWidgets.QLabel()
         self._dots.setAlignment(Qt.AlignCenter)
         cl.addWidget(self._dots)
-
         root.addWidget(self._content)
 
-        # Single opacity effect covers the text block (image fades separately
-        # via _HeroImage replacement, which is instant at the trough).
         self._opacity = QtWidgets.QGraphicsOpacityEffect(self._content)
         self._opacity.setOpacity(1.0)
         self._content.setGraphicsEffect(self._opacity)
 
-        self._index = 0
         self._timer = QtCore.QTimer(self)
         self._timer.setInterval(_INTERVAL_MS)
         self._timer.timeout.connect(lambda: self._advance(1))
@@ -213,35 +119,61 @@ class _Carousel(QtWidgets.QFrame):
             ctx.cms.content_updated.connect(self._load)
             self._load(ctx.cms.content())
 
-    # ── Theme ─────────────────────────────────────────────────────────────
+    # --- full-bleed background -------------------------------------------
+    def paintEvent(self, _e) -> None:  # noqa: N802
+        from core.colors import to_qcolor
+        p = QtGui.QPainter(self)
+        p.setRenderHint(QtGui.QPainter.Antialiasing)
+        p.setRenderHint(QtGui.QPainter.SmoothPixmapTransform)
+        rect = self.rect()
+        path = QtGui.QPainterPath()
+        path.addRoundedRect(QtCore.QRectF(rect), _RADIUS, _RADIUS)
+        p.setClipPath(path)
 
+        t = self._ctx.theme.tokens
+        if self._pixmap is not None and not self._pixmap.isNull():
+            pm = self._pixmap.scaled(rect.width(), rect.height(),
+                                     Qt.KeepAspectRatioByExpanding,
+                                     Qt.SmoothTransformation)
+            x = (pm.width() - rect.width()) // 2
+            y = (pm.height() - rect.height()) // 2
+            p.drawPixmap(rect, pm, QtCore.QRect(x, y, rect.width(), rect.height()))
+        else:
+            grad = QtGui.QLinearGradient(0, 0, rect.width(), rect.height())
+            grad.setColorAt(0, to_qcolor(t.get("hero", "#173a5e")))
+            grad.setColorAt(1, to_qcolor(t.get("accent_soft", "#1c2d4a")))
+            p.fillRect(rect, grad)
+
+        # Bottom-up dark scrim so the overlaid text stays legible on any image.
+        scrim = QtGui.QLinearGradient(0, rect.height() * 0.30, 0, rect.height())
+        scrim.setColorAt(0.0, QtGui.QColor(0, 0, 0, 0))
+        scrim.setColorAt(0.55, QtGui.QColor(0, 0, 0, 120))
+        scrim.setColorAt(1.0, QtGui.QColor(0, 0, 0, 215))
+        p.fillRect(rect, scrim)
+        p.end()
+
+    # --- theme -----------------------------------------------------------
     def _apply_theme(self) -> None:
         t = self._ctx.theme.tokens
-        self.setStyleSheet(
-            f"#carouselRoot{{background:{t['hero']};border:none;"
-            f"border-radius:{_RADIUS}px;}}"
-        )
         self._eyebrow.setStyleSheet(
-            f"color:{t['accent']};font-size:11px;font-weight:800;"
-            "letter-spacing:2px;"
-        )
+            "color:rgba(255,255,255,0.85);font-size:11px;font-weight:800;"
+            "letter-spacing:2px;background:transparent;")
         self._title.setStyleSheet(
-            f"color:{t['hero_text']};font-size:22px;font-weight:800;"
-        )
-        self._subtitle.setStyleSheet(f"color:{t['hero_muted']};font-size:12px;")
+            "color:#ffffff;font-size:23px;font-weight:800;background:transparent;")
+        self._subtitle.setStyleSheet(
+            "color:rgba(255,255,255,0.82);font-size:12px;background:transparent;")
         self._cta.setStyleSheet(
             f"QPushButton{{background:{t['accent']};color:{t['on_accent']};"
-            f"border:none;border-radius:14px;padding:7px 16px;font-weight:600;}}"
-        )
+            f"border:none;border-radius:15px;padding:8px 18px;font-weight:700;}}"
+            f"QPushButton:hover{{background:{t['indicator']};}}")
         for b in self._nav_btns:
             b.setStyleSheet(
-                f"QToolButton{{color:{t['hero_text']};border:none;"
-                "font-size:20px;padding:0 6px;}"
-            )
+                "QToolButton{color:#ffffff;border:none;font-size:22px;"
+                "padding:0 6px;background:transparent;}"
+                "QToolButton:hover{color:rgba(255,255,255,0.7);}")
         self._show()
 
-    # ── Data ──────────────────────────────────────────────────────────────
-
+    # --- data ------------------------------------------------------------
     def _load(self, content: dict) -> None:
         self._cards = (content or {}).get("carousel", [])
         self._index = 0
@@ -250,34 +182,47 @@ class _Carousel(QtWidgets.QFrame):
     def _show(self) -> None:
         t = self._ctx.theme.tokens
         if not self._cards:
-            self._hero_image.load_url("")
+            self._pixmap = None
             self._title.setText("Welcome to JioPC")
             self._subtitle.setText("Content will appear here once connected.")
             self._cta.hide()
             self._dots.clear()
+            self.update()
             return
-
         card = self._cards[self._index % len(self._cards)]
-        image_url = card.get("image_url", "")
-        self._hero_image.load_url(image_url)
-        self._hero_image.setVisible(bool(image_url))
-
+        self._resolve_image(card)
         self._title.setText(card.get("title", ""))
         self._subtitle.setText(card.get("subtitle", ""))
         label = card.get("cta_label", "")
         self._cta.setVisible(bool(label))
         self._cta.setText(label)
-
         n = len(self._cards)
         idx = self._index % n
-        on, off = t["dot_on"], t["dot"]
         self._dots.setText(" ".join(
-            f"<span style='color:{on if i == idx else off}'>●</span>"
-            for i in range(n)
-        ))
+            f"<span style='color:{'#ffffff' if i == idx else 'rgba(255,255,255,0.35)'}'>●</span>"
+            for i in range(n)))
+        self.update()
 
-    # ── Navigation ────────────────────────────────────────────────────────
+    def _resolve_image(self, card: dict) -> None:
+        pm = _load_local(card.get("image", ""))
+        if pm is not None:
+            self._pixmap = pm
+            self._pending_url = ""
+            return
+        url = card.get("image_url", "")
+        self._pixmap = None
+        self._pending_url = url
+        if url:
+            self._cache.fetch(url, QtCore.QSize(self.width() or 600,
+                                                self.height() or 400),
+                              self._on_remote)
 
+    def _on_remote(self, url: str, pixmap: QtGui.QPixmap) -> None:
+        if url == self._pending_url:
+            self._pixmap = pixmap
+            self.update()
+
+    # --- navigation ------------------------------------------------------
     def _advance(self, step: int) -> None:
         if len(self._cards) < 2:
             return
@@ -288,22 +233,17 @@ class _Carousel(QtWidgets.QFrame):
             self._show()
 
     def _animate_swap(self) -> None:
-        """Cross-fade text block; image updates at the opacity trough."""
         out = QtCore.QPropertyAnimation(self._opacity, b"opacity", self)
         out.setDuration(_FADE_OUT_MS)
         out.setStartValue(self._opacity.opacity())
         out.setEndValue(0.0)
         out.setEasingCurve(QtCore.QEasingCurve.InCubic)
-
         fade_in = QtCore.QPropertyAnimation(self._opacity, b"opacity", self)
         fade_in.setDuration(_FADE_IN_MS)
         fade_in.setStartValue(0.0)
         fade_in.setEndValue(1.0)
         fade_in.setEasingCurve(QtCore.QEasingCurve.OutCubic)
-
-        # Swap content (image + text) at the invisible trough.
         out.finished.connect(self._show)
-
         group = QtCore.QSequentialAnimationGroup(self)
         group.addAnimation(out)
         group.addAnimation(fade_in)
@@ -328,7 +268,7 @@ class _Carousel(QtWidgets.QFrame):
 class CarouselPlugin(WidgetPlugin):
     id = "carousel"
     name = "Featured Carousel"
-    description = "Rotating featured content cards with hero images from the JioPC content feed."
+    description = "Full-bleed featured cards with hero images from the content feed."
     icon = "media-playback-start"
     default_size = (1, 2)
     sizes = [(1, 2), (2, 2), (2, 1)]

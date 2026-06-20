@@ -139,13 +139,26 @@ class MenuWindow(QtWidgets.QWidget):
         outer.setContentsMargins(56, 30, 56, 0)
         outer.setSpacing(10)
 
-        # --- Personalised greeting header ---
+        # --- Personalised greeting header (with a close button top-right) ---
         self._greeting = QtWidgets.QLabel()
         self._greeting.setObjectName("Greeting")
         self._greeting_sub = QtWidgets.QLabel("What would you like to open?")
         self._greeting_sub.setObjectName("GreetingSub")
-        outer.addWidget(self._greeting)
-        outer.addWidget(self._greeting_sub)
+        head = QtWidgets.QHBoxLayout()
+        gcol = QtWidgets.QVBoxLayout()
+        gcol.setSpacing(2)
+        gcol.addWidget(self._greeting)
+        gcol.addWidget(self._greeting_sub)
+        head.addLayout(gcol, 1)
+        close_btn = QtWidgets.QToolButton()
+        close_btn.setText("✕")
+        close_btn.setObjectName("MenuClose")
+        close_btn.setCursor(Qt.PointingHandCursor)
+        close_btn.setToolTip("Close (Esc)")
+        close_btn.setFixedSize(40, 40)
+        close_btn.clicked.connect(self.hide)
+        head.addWidget(close_btn, 0, Qt.AlignTop)
+        outer.addLayout(head)
         outer.addSpacing(8)
 
         # --- Fixed header (search + chips + controls) ---

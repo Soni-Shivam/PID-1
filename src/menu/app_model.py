@@ -22,6 +22,19 @@ ENTRY = Qt.UserRole + 7
 _GENERIC_ICON = "application-x-executable"
 
 
+def fuzzy_match(query: str, text: str) -> bool:
+    """True if every query char appears in *text* in order (subsequence match).
+
+    Typo/gap tolerant: 'gimp' matches 'GNU Image Manipulation Program' via
+    initials, 'clc' matches 'Calculator'. Substring is the strongest case and
+    is naturally included. Empty query matches everything.
+    """
+    if not query:
+        return True
+    it = iter(text)
+    return all(ch in it for ch in query)
+
+
 class AppListModel(QtCore.QAbstractListModel):
     """Flat model over the installed-app catalogue."""
 
@@ -112,7 +125,10 @@ class AppFilterProxy(QtCore.QSortFilterProxyModel):
         if self._query:
             name = (src.data(idx, NAME) or "").lower()
             comment = (src.data(idx, COMMENT) or "").lower()
-            if self._query not in name and self._query not in comment:
+            # Substring on either field, or a fuzzy subsequence match on the
+            # name (so partial/initials/typos still find the app).
+            if (self._query not in name and self._query not in comment
+                    and not fuzzy_match(self._query, name)):
                 return False
         if self._category:
             if self._category not in (src.data(idx, CATEGORIES) or []):

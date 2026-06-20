@@ -99,6 +99,8 @@ def main() -> int:
 
     # Record first paint once the event loop has drawn the dock.
     QtCore.QTimer.singleShot(0, _log_first_paint)
+    if os.environ.get("JIOPC_OPEN_MENU"):   # screenshot/verify hook
+        QtCore.QTimer.singleShot(600, toggle_menu)
     return exec_app(app)
 
 

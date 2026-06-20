@@ -81,7 +81,9 @@ class QuickTilesPlugin(WidgetPlugin):
     description = "One-tap shortcuts to your most used apps and actions."
     icon = "view-grid"
     default_size = (1, 1)
+    sizes = [(1, 1), (2, 1)]
     needs_cms = True
+    category = "Productivity"
 
     def create_view(self, ctx: WidgetContext) -> QtWidgets.QWidget:
         return _QuickTiles(ctx)

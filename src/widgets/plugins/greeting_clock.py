@@ -74,6 +74,8 @@ class GreetingClockPlugin(WidgetPlugin):
     description = "Personalized greeting with your name and a live clock."
     icon = "preferences-system-time"
     default_size = (1, 1)
+    sizes = [(1, 1), (2, 1)]
+    category = "Information"
 
     def create_view(self, ctx: WidgetContext) -> QtWidgets.QWidget:
         return _GreetingClock(ctx)

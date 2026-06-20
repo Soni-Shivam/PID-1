@@ -331,7 +331,9 @@ class CarouselPlugin(WidgetPlugin):
     description = "Rotating featured content cards with hero images from the JioPC content feed."
     icon = "media-playback-start"
     default_size = (1, 2)
+    sizes = [(1, 2), (2, 2), (2, 1)]
     needs_cms = True
+    category = "Entertainment"
 
     def create_view(self, ctx: WidgetContext) -> QtWidgets.QWidget:
         return _Carousel(ctx)

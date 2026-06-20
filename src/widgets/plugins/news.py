@@ -102,7 +102,9 @@ class NewsPlugin(WidgetPlugin):
     description = "Live top headlines from the JioPC content feed."
     icon = "news-subscribe"
     default_size = (1, 2)
+    sizes = [(1, 2), (1, 1), (2, 2)]
     needs_cms = True
+    category = "Information"
 
     def create_view(self, ctx: WidgetContext) -> QtWidgets.QWidget:
         return _News(ctx)

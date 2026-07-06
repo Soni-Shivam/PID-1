@@ -8,6 +8,8 @@ all rendered on the CPU rasterizer inside a single Qt runtime.
 
 ![Customized desktop](screenshots/customized_desktop.png)
 
+[Demo video](screenshots/demo.webm)
+
 ## Components
 
 | | Component | What it does |
@@ -75,7 +77,6 @@ scripts/        deployment/dev scripts
 - [`INSTALL.md`](INSTALL.md) — install/uninstall/build steps
 - [`cms-mock/SCHEMA.md`](cms-mock/SCHEMA.md) — the CMS content contract consumed by the widget engine
 - [`benchmarks/METHODOLOGY.md`](benchmarks/METHODOLOGY.md) — how the idle CPU/RAM/startup numbers above were measured
-- [`JIOPC_CHALLENGE1_ROADMAP.md`](JIOPC_CHALLENGE1_ROADMAP.md) — full challenge brief and constraints
 
 ## Verification
 

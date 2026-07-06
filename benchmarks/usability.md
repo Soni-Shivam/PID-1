@@ -23,8 +23,8 @@ button, not a redesign.
 
 ## What has been verified instead (not a substitute for the above)
 
-Manual feature walkthrough during development (see `PROGRESS.md` ME log)
-confirmed each surface is reachable and functional: dock launch/focus/pin,
+Manual feature walkthrough during development confirmed each surface is
+reachable and functional: dock launch/focus/pin,
 menu search + category browse + app launch, widget add/remove via the Widget
 Store, light/dark theme switch, first-run wizard. These confirm the features
 *work*, not that a first-time user *finds* them without help — that's what

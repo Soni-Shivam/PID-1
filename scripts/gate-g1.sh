@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# gate-g1.sh - Fresh-VM .deb proof (Roadmapv2 Gate G1, closes debt D2).
+# gate-g1.sh - Fresh-VM .deb proof of the packaged install/autostart path.
 #
 # MUST be run against a freshly RESTORED 00-clean snapshot (no dev deps, no
 # jiopc-home installed). It first asserts cleanliness via a SENTINEL: if the

@@ -1,8 +1,7 @@
 # Benchmark methodology
 
 Every number below is reproducible with one command against the target VM
-(Ubuntu 24.04 + LxQt, X11, no compositor, 4 vCPU / 8 GB, per
-`JIOPC_CHALLENGE1_ROADMAP.md` Section 1):
+(Ubuntu 24.04 + LxQt, X11, no compositor, 4 vCPU / 8 GB):
 
 ```bash
 ./benchmarks/measure.sh            # 1280x720 (mandated minimum test resolution)
@@ -30,8 +29,7 @@ Two related numbers, because they measure different things:
   LxQt autostart session signal to that same first paint, via the packaged
   `.deb` + `/etc/xdg/autostart/jiopc-home.desktop` entry. This was last
   measured end-to-end on a freshly-restored VM snapshot via
-  `scripts/gate-g1.sh` (see `results/2026-06-12_g1_gate.md` in PROGRESS.md
-  history) at **0.621 s**, ~5x under budget. It requires a snapshot restore
+  `scripts/gate-g1.sh` at **0.621 s**, ~5x under budget. It requires a snapshot restore
   to test honestly (a warm VM's disk/page cache makes every run look
   artificially fast), so it is not re-run on every code change — only at
   packaging gates. The app-internal number tracks regressions between gates.

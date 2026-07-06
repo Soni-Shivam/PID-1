@@ -13,7 +13,7 @@ plain JSON persistence. One process, one `QApplication`.**
 
 | Choice | Why |
 |---|---|
-| PyQt5 over PyQt6/PySide6 | LxQt on the target Ubuntu 24.04 image is itself Qt5-based, so PyQt5 shares the platform's already-loaded Qt5 libraries rather than pulling in a second major Qt version — smaller footprint, and no risk of two incompatible Qt runtimes coexisting in the session. Verified as the correct choice on Day 0 by checking the installed LxQt/Qt version before committing (see `PROGRESS.md`). |
+| PyQt5 over PyQt6/PySide6 | LxQt on the target Ubuntu 24.04 image is itself Qt5-based, so PyQt5 shares the platform's already-loaded Qt5 libraries rather than pulling in a second major Qt version — smaller footprint, and no risk of two incompatible Qt runtimes coexisting in the session. Verified as the correct choice on Day 0 by checking the installed LxQt/Qt version before committing. |
 | Python over C++ | The five components are UI-orchestration-heavy, not compute-heavy; Python's iteration speed mattered far more than its ~30–50 MB interpreter overhead, which the idle-RSS budget comfortably absorbs (measured: 97 MB baseline with zero features, 145–155 MB with the full shell — see `benchmarks/results/`). |
 | Qt Widgets (not Qt Quick/QML) | Renders entirely on the CPU rasterizer with no compositor and no GPU dependency — QML's scene-graph model assumes a GPU-backed (or at least compositor-friendly) pipeline that this target explicitly does not have. |
 | One `QApplication` process for all five components | One Qt runtime in RAM instead of five; `setStyleSheet()` re-themes dock+menu+widgets atomically in one call; one autostart entry, one process to benchmark, no IPC to design or debug. This is the single biggest lever against the 200 MB budget. |

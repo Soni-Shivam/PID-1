@@ -9,3 +9,5 @@ nohup.out
 benchmarks/results/*.tmp
 packaging/build/
 dist/
+CLAUDE.md
+.claude/

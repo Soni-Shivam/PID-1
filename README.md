@@ -1,7 +1,7 @@
 # JioPC Home
 
 A single-process desktop shell for **Ubuntu 24.04 + LxQt**, built for JioPC
-Hackathon 2026 — Challenge 01 ("Engaging Desktop Experience"). One
+Hackathon 2026, Challenge 01 ("Engaging Desktop Experience"). One
 `QApplication`, no compositor, no GPU, no Electron: a dock, an application
 menu, a plugin-based widget engine, a theme engine, and a first-run wizard,
 all rendered on the CPU rasterizer inside a single Qt runtime.
@@ -18,12 +18,49 @@ all rendered on the CPU rasterizer inside a single Qt runtime.
 |---|---|---|
 | A | **Dock** | Left-edge dock with pin/unpin/reorder, running-window indicators via `python3-xlib` (event-driven, not polled), hover magnification, autohide |
 | B | **Application Menu** | Fuzzy search, category filters, Recently/Most Used, and a usage-weighted Recommended section |
-| C | **Widget Engine** | Snap-grid desktop widgets driven by a plugin ABC — 12 plugins ship today (carousel, news, quick-launch tiles, greeting/clock, calendar, focus timer, system health, music player, app shortcuts, digital wellbeing, assistant, plain clock); adding one is "add a file" |
+| C | **Widget Engine** | Snap-grid desktop widgets driven by a plugin ABC; 12 plugins ship today (carousel, news, quick-launch tiles, greeting/clock, calendar, focus timer, system health, music player, app shortcuts, digital wellbeing, assistant, plain clock); adding one is "add a file" |
 | D | **Theme Engine** | Token-based light/dark themes rendered through one `QApplication.setStyleSheet()` call, with user accent/font overrides layered on top |
 | E | **First-Run Wizard** | One-time onboarding: greeting, feature tour, initial theme/pin choices |
 
 See [`design.md`](design.md) for the full architecture, technology
 rationale, and known limitations behind each component.
+
+## Architecture
+
+One `QApplication` process hosts all five components. X11 events and CMS
+fetches are the only inputs; every component reads and writes through one
+atomic JSON store, so persisted state is a single source of truth, not five
+separate ones.
+
+```mermaid
+flowchart TB
+    subgraph App["Single QApplication process, src/main.py"]
+        Core["core package: qt_compat, store, paths, theme, x11, colors, user"]
+        Dock["Dock, Component A"]
+        Menu["Application Menu, Component B"]
+        Widgets["Widget Engine, Component C, plugins in widgets/plugins"]
+        Theme["Theme Engine, Component D"]
+        Wizard["First Run Wizard, Component E"]
+    end
+
+    X11["X11 root window events via python3-xlib"] --> Dock
+    Entries["installed .desktop entries"] --> Menu
+    CMS["CMS endpoint, cached feed.json"] --> Widgets
+
+    Theme -->|setStyleSheet, one call| Dock
+    Theme -->|setStyleSheet, one call| Menu
+    Theme -->|setStyleSheet, one call| Widgets
+
+    Dock --> Store["core/store.py, atomic JSON writes"]
+    Menu --> Store
+    Widgets --> Store
+    Theme --> Store
+    Wizard --> Store
+
+    Store --> Config["~/.config/jiopc/home"]
+    Store --> Data["~/.local/share/jiopc/home"]
+    Store --> Cache["~/.cache/jiopc/home"]
+```
 
 ## Measured against the challenge budget
 
@@ -52,7 +89,7 @@ python3 src/main.py
 ```
 
 All persistent state lives under `~/.config/jiopc/home`,
-`~/.local/share/jiopc/home`, and `~/.cache/jiopc/home` — nothing is written
+`~/.local/share/jiopc/home`, and `~/.cache/jiopc/home`; nothing is written
 elsewhere, and a session resumes identically on any machine sharing that
 home directory.
 
@@ -64,7 +101,7 @@ src/
 ├── apps/       desktop_entries (scan .desktop) · launcher (QProcess) · usage (launch log)
 ├── dock/       Component A
 ├── menu/       Component B
-├── widgets/    Component C — engine.py (plugin ABC + discovery) + plugins/
+├── widgets/    Component C, engine.py (plugin ABC + discovery) + plugins/
 ├── wizard/     Component E
 └── settings/   theme + widget-arrange settings UI (Component D's user-facing surface)
 benchmarks/     measure.sh, methodology, results
@@ -75,10 +112,10 @@ scripts/        deployment/dev scripts
 
 ## Documentation
 
-- [`design.md`](design.md) — architecture, technology choices, and known limitations
-- [`INSTALL.md`](INSTALL.md) — install/uninstall/build steps
-- [`cms-mock/SCHEMA.md`](cms-mock/SCHEMA.md) — the CMS content contract consumed by the widget engine
-- [`benchmarks/METHODOLOGY.md`](benchmarks/METHODOLOGY.md) — how the idle CPU/RAM/startup numbers above were measured
+- [`design.md`](design.md): architecture, technology choices, and known limitations
+- [`INSTALL.md`](INSTALL.md): install/uninstall/build steps
+- [`cms-mock/SCHEMA.md`](cms-mock/SCHEMA.md): the CMS content contract consumed by the widget engine
+- [`benchmarks/METHODOLOGY.md`](benchmarks/METHODOLOGY.md): how the idle CPU/RAM/startup numbers above were measured
 
 ## Verification
 

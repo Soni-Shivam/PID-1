@@ -7,6 +7,7 @@ menu, a plugin-based widget engine, a theme engine, and a first-run wizard,
 all rendered on the CPU rasterizer inside a single Qt runtime.
 
 ![Customized desktop](screenshots/customized_desktop.png)
+<img width="101" height="594" alt="Screencast from 07-06-2026 10_22_47 PM" src="https://github.com/user-attachments/assets/c4956288-5261-451c-8319-055b5a54c948" />
 
 [Demo video](screenshots/demo.webm)
 

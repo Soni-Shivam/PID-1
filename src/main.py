@@ -65,7 +65,8 @@ def main() -> int:
     # Desktop widget layer first (it sits at wallpaper level, behind everything).
     cms_service = cms.CmsService(
         settings.get("cms_endpoint", cms.default_endpoint()),
-        cache_file(cms.CACHE_NAME))
+        cache_file(cms.CACHE_NAME),
+        refresh_interval_minutes=settings.get("cms_refresh_minutes", 0))
     desktop = DesktopLayer(cms_service, theme)
     desktop.start()
 

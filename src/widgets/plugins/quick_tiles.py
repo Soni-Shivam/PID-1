@@ -13,6 +13,9 @@ from core.qt_compat import Qt, QtCore, QtGui, QtWidgets
 from widgets.engine import WidgetContext, WidgetPlugin
 
 _COLS = 2
+_TILE_MIN_H = 76
+_TILE_ICON_PX = 38
+_ROW_SPACING = 10
 # A vivid, rotating badge palette (purple-led to match the shell).
 _PALETTE = ["#b15cff", "#ec4899", "#22c55e", "#f59e0b", "#3b82f6", "#06b6d4"]
 
@@ -62,6 +65,7 @@ class _QuickTiles(QtWidgets.QFrame):
         super().__init__()
         self._ctx = ctx
         self._content: dict = {}
+        self._tile_cap = 6
         outer = QtWidgets.QVBoxLayout(self)
         outer.setContentsMargins(18, 16, 18, 16)
         outer.setSpacing(10)
@@ -86,25 +90,46 @@ class _QuickTiles(QtWidgets.QFrame):
             f"Start exploring</span>")
         self._render(self._content)
 
+    def _tiles_that_fit(self) -> int:
+        """How many tiles (in rows of _COLS) fit the card's current height.
+
+        The card is always 1 grid row tall regardless of resize-cycle width,
+        and that row's height varies a lot between 1280x720 and larger
+        screens, so the tile count must adapt instead of assuming 3 rows fit.
+        """
+        available = (self.height() - self.layout().contentsMargins().top()
+                     - self.layout().contentsMargins().bottom()
+                     - self._title.sizeHint().height()
+                     - 2 * self.layout().spacing())
+        rows = max(1, (available + _ROW_SPACING) // (_TILE_MIN_H + _ROW_SPACING))
+        return int(min(6, rows * _COLS))
+
     def _render(self, content: dict) -> None:
         self._content = content or {}
+        self._tile_cap = self._tiles_that_fit()
         while self._grid.count():
             item = self._grid.takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
-        for i, tile in enumerate(self._content.get("tiles", [])[:6]):
+        for i, tile in enumerate(self._content.get("tiles", [])[:self._tile_cap]):
             self._grid.addWidget(self._tile(tile, i), i // _COLS, i % _COLS)
+
+    def resizeEvent(self, event: QtGui.QResizeEvent) -> None:  # noqa: N802
+        super().resizeEvent(event)
+        if self._tiles_that_fit() != self._tile_cap:
+            self._render(self._content)
 
     def _tile(self, tile: dict, index: int) -> QtWidgets.QToolButton:
         t = self._ctx.theme.tokens
         color = _PALETTE[index % len(_PALETTE)]
         btn = QtWidgets.QToolButton()
         btn.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
-        btn.setIcon(_badge(tile.get("icon", ""), tile.get("label", ""), color))
-        btn.setIconSize(QtCore.QSize(46, 46))
+        btn.setIcon(_badge(tile.get("icon", ""), tile.get("label", ""), color,
+                           px=_TILE_ICON_PX))
+        btn.setIconSize(QtCore.QSize(_TILE_ICON_PX, _TILE_ICON_PX))
         btn.setText(tile.get("label", ""))
         btn.setCursor(Qt.PointingHandCursor)
-        btn.setMinimumHeight(96)
+        btn.setMinimumHeight(_TILE_MIN_H)
         btn.setSizePolicy(QtWidgets.QSizePolicy.Expanding,
                           QtWidgets.QSizePolicy.Expanding)
         btn.setStyleSheet(

@@ -100,12 +100,18 @@ class CmsService(QtCore.QObject):
     content_updated = QtCore.pyqtSignal(dict)
 
     def __init__(self, endpoint: str, cache_path: Path,
-                 parent: QtCore.QObject | None = None) -> None:
+                 parent: QtCore.QObject | None = None,
+                 refresh_interval_minutes: int = 0) -> None:
         super().__init__(parent)
         self._endpoint = endpoint
         self._cache_path = Path(cache_path)
         self._content = initial_content(self._cache_path)
         self._worker: _FetchWorker | None = None
+        self._timer: QtCore.QTimer | None = None
+        if refresh_interval_minutes > 0:
+            self._timer = QtCore.QTimer(self)
+            self._timer.timeout.connect(self.refresh)
+            self._timer.start(refresh_interval_minutes * 60_000)
 
     def content(self) -> dict[str, Any]:
         return self._content
